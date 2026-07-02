@@ -57,6 +57,17 @@ dictee par le parent + l'offset donne a `set_attach`) ; on fait donc
 tourner les roues en rappelant `set_attach` a chaque pas avec une
 rotation mise a jour (position laterale inchangee).
 
+### Train arriere
+
+Une rangee de `hexapod_v3.tail_count` (4 par defaut) nodes decoratifs
+(`hexapod_v3:tail_segment`, memes textures que le corps) est **attachee**
+a la queue leu leu derriere le hexapod (le long de l'axe -Z, colle a la
+face arriere), un peu comme un petit train. Purement statique : un seul
+`set_attach` par segment a la creation suffit, ces segments ne tournant
+pas sur eux-memes (contrairement aux roues) -- ils suivent la position et
+le cap du hexapod sans latence grace a l'attachement, comme les roues.
+Reglable via `hexapod_v3.tail_count` et `hexapod_v3.tail_size`.
+
 ### Sons
 
 Deux sons en boucle (fonction generique `hexapod_v3.set_looping_sound`),

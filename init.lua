@@ -41,6 +41,11 @@ hexapod_v3.turn_sound = "hexapod_v3_turn"
 hexapod_v3.turn_sound_gain = 0.4
 hexapod_v3.turn_sound_max_hear_distance = 16
 
+-- Petit "train" de nodes decoratifs attaches en ligne, a la queue leu leu,
+-- derriere le hexapod (memes textures que le corps).
+hexapod_v3.tail_count = 5
+hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -98,6 +103,24 @@ function hexapod_v3.attach_wheel(wheel, pod_object, side)
 	wheel:set_attach(pod_object, "",
 		{ x = side * hexapod_v3.wheel_offset * 10, y = 0, z = 0 },
 		{ x = 0, y = 0, z = 0 })
+end
+
+-- Cree et attache, a la queue leu leu derriere le hexapod, une rangee de
+-- `hexapod_v3.tail_count` segments (le premier colle a la face arriere -Z,
+-- puis un par un le long de -Z). Purement decoratif et statique : un seul
+-- `set_attach` par segment suffit, pas besoin de le rappeler a chaque pas
+-- (contrairement aux roues, ces segments ne tournent pas sur eux-memes).
+function hexapod_v3.spawn_tail(self)
+	self.tail_segments = {}
+	local pod_object = self.object
+	local pod_pos = pod_object:get_pos()
+
+	for i = 1, hexapod_v3.tail_count do
+		local segment = minetest.add_entity(pod_pos, "hexapod_v3:tail_segment")
+		local offset_z = -(0.5 + hexapod_v3.tail_size / 2 + (i - 1) * hexapod_v3.tail_size)
+		segment:set_attach(pod_object, "", { x = 0, y = 0, z = offset_z * 10 }, { x = 0, y = 0, z = 0 })
+		table.insert(self.tail_segments, segment)
+	end
 end
 
 -- Fait tourner les roues autour de leur axe (rotation.x, en degres)
@@ -229,6 +252,25 @@ minetest.register_entity("hexapod_v3:wheel", {
 	},
 })
 
+-- Segment decoratif statique du "train" attache derriere le hexapod (voir
+-- `hexapod_v3.spawn_tail`). Memes textures que le corps du hexapod.
+minetest.register_entity("hexapod_v3:tail_segment", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = { x = hexapod_v3.tail_size, y = hexapod_v3.tail_size, z = hexapod_v3.tail_size },
+		textures = {
+			"hexapod_v3_node.png", "hexapod_v3_node.png",
+			"hexapod_v3_node.png", "hexapod_v3_node.png",
+			"hexapod_v3_node.png", "hexapod_v3_node.png",
+		},
+		physical = false,
+		collide_with_objects = false,
+		collisionbox = { 0, 0, 0, 0, 0, 0 },
+		pointable = false,
+		static_save = false,
+	},
+})
+
 minetest.register_entity("hexapod_v3:pod", {
 	initial_properties = {
 		visual = "cube",
@@ -256,6 +298,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	wheel_spin_deg = 0,
 	engine_sound_handle = nil,
 	turn_sound_handle = nil,
+	tail_segments = nil,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
@@ -266,6 +309,8 @@ minetest.register_entity("hexapod_v3:pod", {
 		self.wheel_left = minetest.add_entity(pos, "hexapod_v3:wheel")
 		hexapod_v3.attach_wheel(self.wheel_right, self.object, 1)
 		hexapod_v3.attach_wheel(self.wheel_left, self.object, -1)
+
+		hexapod_v3.spawn_tail(self)
 	end,
 
 	on_deactivate = function(self)
@@ -287,6 +332,12 @@ minetest.register_entity("hexapod_v3:pod", {
 		if self.turn_sound_handle then
 			minetest.sound_stop(self.turn_sound_handle)
 			self.turn_sound_handle = nil
+		end
+		if self.tail_segments then
+			for _, segment in ipairs(self.tail_segments) do
+				segment:remove()
+			end
+			self.tail_segments = nil
 		end
 		hexapod_v3.pods[self] = nil
 	end,

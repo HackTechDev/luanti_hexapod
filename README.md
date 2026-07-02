@@ -100,6 +100,13 @@ de la chaine pour qu'ils restent colles les uns sous les autres
 Le nombre de nodes du femur et du tibia se regle via
 `hexapod_v3.leg_segment_height` (2 par defaut).
 
+**Hauteur de pose.** Les pattes pendent sous le corps sur
+`hexapod_v3.leg_drop` noeuds (calcule automatiquement a partir de
+`leg_segment_height` et `tail_size`). Le `on_place` de l'item en tient
+compte pour poser le hexapod plus haut que son seul corps ne le
+demanderait, afin que les pattes ne s'enfoncent pas dans le sol au lieu
+de rester visibles au-dessus.
+
 ### Sons
 
 Deux sons en boucle (fonction generique `hexapod_v3.set_looping_sound`),

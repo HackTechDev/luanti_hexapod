@@ -55,6 +55,13 @@ hexapod_v3.leg_pair_count = 3       -- un hexapod a 6 pattes, donc 3 paires
 hexapod_v3.leg_pair_spacing = 2     -- ecart (en segments du train) entre deux hanches -> 1 segment vide entre deux paires de pattes
 hexapod_v3.leg_segment_height = 2  -- hauteur du femur et du tibia, en nombre de noeuds
 
+-- Distance verticale entre le centre du corps et le point le plus bas des
+-- pattes (2 jointures + les nodes de femur/tibia, cf. `hexapod_v3.spawn_leg`) :
+-- utilisee pour poser le hexapod assez haut pour que ses pattes ne
+-- s'enfoncent pas dans le sol (voir le `on_place` de l'item plus bas).
+hexapod_v3.leg_chain_length = 2 + 2 * hexapod_v3.leg_segment_height  -- nombre de nodes dans une patte
+hexapod_v3.leg_drop = (hexapod_v3.leg_chain_length - 1) * hexapod_v3.tail_size + hexapod_v3.tail_size / 2
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -531,7 +538,10 @@ minetest.register_craftitem("hexapod_v3:pod", {
 			return itemstack
 		end
 
-		local pos = vector.add(pointed_thing.above, { x = 0, y = 0.5, z = 0 })
+		-- +0.5 pose le corps au ras du sol ; +leg_drop remonte en plus le
+		-- corps de la longueur des pattes, pour qu'elles ne s'enfoncent pas
+		-- dans le terrain (elles pendent sous le corps, voir hexapod_v3.spawn_leg).
+		local pos = vector.add(pointed_thing.above, { x = 0, y = 0.5 + hexapod_v3.leg_drop, z = 0 })
 		minetest.add_entity(pos, "hexapod_v3:pod")
 
 		if not minetest.settings:get_bool("creative_mode") then

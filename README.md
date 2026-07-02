@@ -72,22 +72,21 @@ et `hexapod_v3.tail_size`.
 
 Deux pattes symetriques (gauche/droite) sont **attachees** au premier
 segment du train, c'est-a-dire au node situe immediatement derriere la
-tete. Chaque patte est une chaine de 4 pieces (`hexapod_v3:leg_part`,
-memes textures que le corps, taille ajustee via `set_properties` a la
-creation) suspendue verticalement sous son flanc d'attache :
+tete. Chaque patte est une chaine de 6 nodes (`hexapod_v3:leg_part`),
+**tous de la meme taille que les nodes du corps** (`hexapod_v3.tail_size`),
+suspendue verticalement sous son flanc d'attache :
 
 ```
 Corps -> Node de liaison -> Femur (2 noeuds) -> Node de liaison -> Tibia (2 noeuds)
 ```
 
-Comme le train, c'est purement statique : chaque piece est attachee une
+Comme le train, c'est purement statique : chaque node est attache une
 fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
-"hanche" (le premier segment du train), avec un decalage vertical calcule
-pour que chaque piece soit collee sous la precedente
-(`hexapod_v3.spawn_leg`). Reglable via `hexapod_v3.leg_connector_size`
-(taille des deux nodes de liaison), `hexapod_v3.leg_segment_height`
-(hauteur du femur et du tibia) et `hexapod_v3.leg_femur_thickness` /
-`hexapod_v3.leg_tibia_thickness` (epaisseur de ces deux segments).
+"hanche" (le premier segment du train), avec un decalage vertical qui
+augmente d'exactement `hexapod_v3.tail_size` a chaque node de la chaine
+pour qu'ils restent colles les uns sous les autres
+(`hexapod_v3.spawn_leg`). Le nombre de nodes du femur et du tibia se
+regle via `hexapod_v3.leg_segment_height` (2 par defaut).
 
 ### Sons
 

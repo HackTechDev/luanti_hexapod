@@ -71,44 +71,47 @@ function hexapod_v3.update_camera(self, player)
 	self.camera_rig:move_to(target, true)
 end
 
--- Calcule les positions (droite, gauche) des roues pour un hexapod situe a
--- `pod_pos` avec l'orientation `yaw`. Le vecteur "droite" a yaw=0 est
--- (1,0,0) (perpendiculaire a `minetest.yaw_to_dir(0)` = (0,0,1)) ; on le
--- fait tourner avec le hexapod de la meme facon que son cap.
-function hexapod_v3.wheel_side_positions(pod_pos, yaw)
-	local right_dir = { x = math.cos(yaw), y = 0, z = math.sin(yaw) }
-	local offset = vector.multiply(right_dir, hexapod_v3.wheel_offset)
-	return vector.add(pod_pos, offset), vector.subtract(pod_pos, offset)
+-- Attache une roue au flanc (droit ou gauche) du hexapod.
+--
+-- Contrairement a la camera (qui doit suivre un joueur avec un regard
+-- libre, donc etre positionnee independamment), les roues doivent rester
+-- rigoureusement collees au corps du hexapod : utiliser `move_to()` comme
+-- pour la camera provoquerait un decalage constant vers l'arriere des que
+-- le hexapod bouge, puisque cette methode fait "rattraper" une cible en
+-- mouvement par interpolation (donc toujours legerement en retard). Le
+-- veritable attachement moteur (`set_attach`), lui, colle la roue a la
+-- position/rotation *courante* du parent a chaque image, sans latence.
+--
+-- Note : la position passee a `set_attach` doit etre multipliee par 10 par
+-- rapport aux coordonnees monde (cf. section "Attachments" de lua_api.md).
+function hexapod_v3.attach_wheel(wheel, pod_object, side)
+	wheel:set_attach(pod_object, "",
+		{ x = side * hexapod_v3.wheel_offset * 10, y = 0, z = 0 },
+		{ x = 0, y = 0, z = 0 })
 end
 
--- Repositionne les roues aux flancs du hexapod et les fait tourner autour
--- de leur axe (rotation.x) proportionnellement a la vitesse d'avancement
--- signee (`signed_speed`, positive en marche avant, negative en marche
--- arriere, nulle a l'arret). La rotation.y suit le cap du hexapod, pour que
--- l'axe de rotation des roues reste bien perpendiculaire a la direction de
--- deplacement quel que soit l'orientation.
+-- Fait tourner les roues autour de leur axe (rotation.x, en degres)
+-- proportionnellement a la vitesse d'avancement signee du hexapod
+-- (positive en marche avant, negative en marche arriere, nulle a l'arret
+-- ou lors d'un simple pivot sur place).
 --
--- Comme pour la camera, on utilise `move_to()` (interpolation fluide) et
--- non `set_pos()`. `set_rotation()` n'a pas ce probleme cote moteur (voir
--- `UnitSAO::setRotation`, qui se contente de stocker la valeur ; elle est
--- ensuite transmise et interpolee par le meme mecanisme que la position).
+-- Etant attachees, on ne peut pas animer leur rotation via `set_rotation`
+-- (ignore sur un objet attache, cf. lua_api.md) : il faut rappeler
+-- `set_attach` avec la nouvelle rotation. Seule la rotation change a
+-- chaque appel, la position (l'offset lateral) reste fixe.
 function hexapod_v3.update_wheels(self, dtime, signed_speed)
 	if not self.wheel_right or not self.wheel_left then
 		return
 	end
 
-	local yaw = self.object:get_yaw()
-	local pod_pos = self.object:get_pos()
-	local right_pos, left_pos = hexapod_v3.wheel_side_positions(pod_pos, yaw)
+	local angular_speed_deg = math.deg(signed_speed / hexapod_v3.wheel_radius)
+	self.wheel_spin_deg = (self.wheel_spin_deg + angular_speed_deg * dtime) % 360
 
-	self.wheel_spin = (self.wheel_spin + (signed_speed / hexapod_v3.wheel_radius) * dtime) % (2 * math.pi)
-	local rotation = { x = self.wheel_spin, y = yaw, z = 0 }
-
-	self.wheel_right:move_to(right_pos, true)
-	self.wheel_right:set_rotation(rotation)
-
-	self.wheel_left:move_to(left_pos, true)
-	self.wheel_left:set_rotation(rotation)
+	local rotation = { x = self.wheel_spin_deg, y = 0, z = 0 }
+	self.wheel_right:set_attach(self.object, "",
+		{ x = hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
+	self.wheel_left:set_attach(self.object, "",
+		{ x = -hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
 end
 
 function hexapod_v3.start_driving(self, player)
@@ -202,16 +205,17 @@ minetest.register_entity("hexapod_v3:pod", {
 	camera_rig = nil,
 	wheel_right = nil,
 	wheel_left = nil,
-	wheel_spin = 0,
+	wheel_spin_deg = 0,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
 		hexapod_v3.pods[self] = true
 
-		local right_pos, left_pos = hexapod_v3.wheel_side_positions(
-			self.object:get_pos(), self.object:get_yaw())
-		self.wheel_right = minetest.add_entity(right_pos, "hexapod_v3:wheel")
-		self.wheel_left = minetest.add_entity(left_pos, "hexapod_v3:wheel")
+		local pos = self.object:get_pos()
+		self.wheel_right = minetest.add_entity(pos, "hexapod_v3:wheel")
+		self.wheel_left = minetest.add_entity(pos, "hexapod_v3:wheel")
+		hexapod_v3.attach_wheel(self.wheel_right, self.object, 1)
+		hexapod_v3.attach_wheel(self.wheel_left, self.object, -1)
 	end,
 
 	on_deactivate = function(self)

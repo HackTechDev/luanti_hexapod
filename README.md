@@ -35,14 +35,27 @@ hexapod est oriente.
 
 ### Roues
 
-Deux petites entites ("roues", `hexapod_v3:wheel`) sont placees de part et
-d'autre du hexapod et le suivent en permanence (position et cap). Elles
-tournent sur elles-memes proportionnellement a sa vitesse : vers l'avant
-quand il avance, vers l'arriere quand il recule, immobiles a l'arret ou
-pendant un simple pivot sur place. Les distances/tailles se reglent via
-`hexapod_v3.wheel_offset`, `hexapod_v3.wheel_radius` (utilise pour
-convertir la vitesse lineaire en vitesse de rotation) et
+Deux petites entites ("roues", `hexapod_v3:wheel`) sont **attachees**
+(`set_attach`) de part et d'autre du hexapod, ce qui les colle rigidement
+a son corps (position et cap) sans le moindre decalage, meme en mouvement.
+Elles tournent sur elles-memes proportionnellement a sa vitesse : vers
+l'avant quand il avance, vers l'arriere quand il recule, immobiles a
+l'arret ou pendant un simple pivot sur place. Les distances/tailles se
+reglent via `hexapod_v3.wheel_offset`, `hexapod_v3.wheel_radius` (utilise
+pour convertir la vitesse lineaire en vitesse de rotation) et
 `hexapod_v3.wheel_size`.
+
+**Pourquoi l'attachement plutot que `move_to()` (comme la camera) ?**
+`move_to()` fait "rattraper" une position cible par interpolation cote
+client : quand cette cible bouge en continu (le hexapod en mouvement), le
+suiveur reste toujours legerement en retard, ce qui donnait des roues
+visiblement decalees vers l'arriere. Un objet **attache**, lui, est colle
+a la position/rotation *courante* du parent a chaque image (cf. section
+"Attachments" de `lua_api.md`), sans latence. La contrepartie : un objet
+attache ignore les appels a `set_rotation()` (sa rotation est entierement
+dictee par le parent + l'offset donne a `set_attach`) ; on fait donc
+tourner les roues en rappelant `set_attach` a chaque pas avec une
+rotation mise a jour (position laterale inchangee).
 
 ### Camera a la troisieme personne
 

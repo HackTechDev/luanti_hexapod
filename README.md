@@ -33,6 +33,17 @@ texture distincte (`hexapod_v3_node_front.png`, fond orange avec un chevron)
 pour qu'on puisse voir d'un coup d'oeil, de l'exterieur, dans quel sens le
 hexapod est oriente.
 
+### Roues
+
+Deux petites entites ("roues", `hexapod_v3:wheel`) sont placees de part et
+d'autre du hexapod et le suivent en permanence (position et cap). Elles
+tournent sur elles-memes proportionnellement a sa vitesse : vers l'avant
+quand il avance, vers l'arriere quand il recule, immobiles a l'arret ou
+pendant un simple pivot sur place. Les distances/tailles se reglent via
+`hexapod_v3.wheel_offset`, `hexapod_v3.wheel_radius` (utilise pour
+convertir la vitesse lineaire en vitesse de rotation) et
+`hexapod_v3.wheel_size`.
+
 ### Camera a la troisieme personne
 
 Des que le joueur prend les commandes :
@@ -110,6 +121,7 @@ hexapod_v3/
 ├── mod.conf                       # declaration du mod
 ├── textures/
 │   ├── hexapod_v3_node.png        # texture des faces du hexapod
-│   └── hexapod_v3_node_front.png  # texture de la face avant
+│   ├── hexapod_v3_node_front.png  # texture de la face avant
+│   └── hexapod_v3_wheel.png       # texture des roues
 └── README.md
 ```

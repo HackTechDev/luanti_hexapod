@@ -25,6 +25,12 @@ hexapod_v3.turn_speed = math.rad(90)  -- radians par seconde
 -- quelle que soit la direction observee.
 hexapod_v3.camera_distance = 6
 
+-- "Roues" decoratives : deux petites entites placees de part et d'autre du
+-- hexapod, qui tournent sur elles-memes quand il avance ou recule.
+hexapod_v3.wheel_offset = 0.65  -- distance au centre du hexapod, en noeuds
+hexapod_v3.wheel_radius = 0.3   -- rayon utilise pour convertir vitesse -> vitesse de rotation
+hexapod_v3.wheel_size = 0.35    -- taille visuelle des roues
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -63,6 +69,46 @@ function hexapod_v3.update_camera(self, player)
 	local pod_pos = self.object:get_pos()
 	local target = hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
 	self.camera_rig:move_to(target, true)
+end
+
+-- Calcule les positions (droite, gauche) des roues pour un hexapod situe a
+-- `pod_pos` avec l'orientation `yaw`. Le vecteur "droite" a yaw=0 est
+-- (1,0,0) (perpendiculaire a `minetest.yaw_to_dir(0)` = (0,0,1)) ; on le
+-- fait tourner avec le hexapod de la meme facon que son cap.
+function hexapod_v3.wheel_side_positions(pod_pos, yaw)
+	local right_dir = { x = math.cos(yaw), y = 0, z = math.sin(yaw) }
+	local offset = vector.multiply(right_dir, hexapod_v3.wheel_offset)
+	return vector.add(pod_pos, offset), vector.subtract(pod_pos, offset)
+end
+
+-- Repositionne les roues aux flancs du hexapod et les fait tourner autour
+-- de leur axe (rotation.x) proportionnellement a la vitesse d'avancement
+-- signee (`signed_speed`, positive en marche avant, negative en marche
+-- arriere, nulle a l'arret). La rotation.y suit le cap du hexapod, pour que
+-- l'axe de rotation des roues reste bien perpendiculaire a la direction de
+-- deplacement quel que soit l'orientation.
+--
+-- Comme pour la camera, on utilise `move_to()` (interpolation fluide) et
+-- non `set_pos()`. `set_rotation()` n'a pas ce probleme cote moteur (voir
+-- `UnitSAO::setRotation`, qui se contente de stocker la valeur ; elle est
+-- ensuite transmise et interpolee par le meme mecanisme que la position).
+function hexapod_v3.update_wheels(self, dtime, signed_speed)
+	if not self.wheel_right or not self.wheel_left then
+		return
+	end
+
+	local yaw = self.object:get_yaw()
+	local pod_pos = self.object:get_pos()
+	local right_pos, left_pos = hexapod_v3.wheel_side_positions(pod_pos, yaw)
+
+	self.wheel_spin = (self.wheel_spin + (signed_speed / hexapod_v3.wheel_radius) * dtime) % (2 * math.pi)
+	local rotation = { x = self.wheel_spin, y = yaw, z = 0 }
+
+	self.wheel_right:move_to(right_pos, true)
+	self.wheel_right:set_rotation(rotation)
+
+	self.wheel_left:move_to(left_pos, true)
+	self.wheel_left:set_rotation(rotation)
 end
 
 function hexapod_v3.start_driving(self, player)
@@ -113,6 +159,25 @@ minetest.register_entity("hexapod_v3:camera_rig", {
 	},
 })
 
+-- Roue decorative attachee de part et d'autre du hexapod (voir
+-- `hexapod_v3.update_wheels`).
+minetest.register_entity("hexapod_v3:wheel", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = { x = hexapod_v3.wheel_size, y = hexapod_v3.wheel_size, z = hexapod_v3.wheel_size },
+		textures = {
+			"hexapod_v3_wheel.png", "hexapod_v3_wheel.png",
+			"hexapod_v3_wheel.png", "hexapod_v3_wheel.png",
+			"hexapod_v3_wheel.png", "hexapod_v3_wheel.png",
+		},
+		physical = false,
+		collide_with_objects = false,
+		collisionbox = { 0, 0, 0, 0, 0, 0 },
+		pointable = false,
+		static_save = false,
+	},
+})
+
 minetest.register_entity("hexapod_v3:pod", {
 	initial_properties = {
 		visual = "cube",
@@ -135,15 +200,31 @@ minetest.register_entity("hexapod_v3:pod", {
 
 	driver = nil,
 	camera_rig = nil,
+	wheel_right = nil,
+	wheel_left = nil,
+	wheel_spin = 0,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
 		hexapod_v3.pods[self] = true
+
+		local right_pos, left_pos = hexapod_v3.wheel_side_positions(
+			self.object:get_pos(), self.object:get_yaw())
+		self.wheel_right = minetest.add_entity(right_pos, "hexapod_v3:wheel")
+		self.wheel_left = minetest.add_entity(left_pos, "hexapod_v3:wheel")
 	end,
 
 	on_deactivate = function(self)
 		if self.driver and self.driver:is_player() then
 			hexapod_v3.stop_driving(self, self.driver)
+		end
+		if self.wheel_right then
+			self.wheel_right:remove()
+			self.wheel_right = nil
+		end
+		if self.wheel_left then
+			self.wheel_left:remove()
+			self.wheel_left = nil
 		end
 		hexapod_v3.pods[self] = nil
 	end,
@@ -168,32 +249,39 @@ minetest.register_entity("hexapod_v3:pod", {
 
 	on_step = function(self, dtime)
 		local driver = self.driver
-		if not driver or not driver:is_player() then
+		local signed_speed = 0
+
+		if driver and driver:is_player() then
+			local ctrl = driver:get_player_control()
+			local yaw = self.object:get_yaw()
+
+			if ctrl.left then
+				yaw = yaw + hexapod_v3.turn_speed * dtime
+			end
+			if ctrl.right then
+				yaw = yaw - hexapod_v3.turn_speed * dtime
+			end
+			self.object:set_yaw(yaw)
+
+			local dir = minetest.yaw_to_dir(yaw)
+			local vel = { x = 0, y = 0, z = 0 }
+			if ctrl.up then
+				vel = vector.multiply(dir, hexapod_v3.forward_speed)
+				signed_speed = hexapod_v3.forward_speed
+			elseif ctrl.down then
+				vel = vector.multiply(dir, -hexapod_v3.forward_speed)
+				signed_speed = -hexapod_v3.forward_speed
+			end
+			self.object:set_velocity(vel)
+
+			hexapod_v3.update_camera(self, driver)
+		else
 			self.driver = nil
-			return
 		end
 
-		local ctrl = driver:get_player_control()
-		local yaw = self.object:get_yaw()
-
-		if ctrl.left then
-			yaw = yaw + hexapod_v3.turn_speed * dtime
-		end
-		if ctrl.right then
-			yaw = yaw - hexapod_v3.turn_speed * dtime
-		end
-		self.object:set_yaw(yaw)
-
-		local dir = minetest.yaw_to_dir(yaw)
-		local vel = { x = 0, y = 0, z = 0 }
-		if ctrl.up then
-			vel = vector.multiply(dir, hexapod_v3.forward_speed)
-		elseif ctrl.down then
-			vel = vector.multiply(dir, -hexapod_v3.forward_speed)
-		end
-		self.object:set_velocity(vel)
-
-		hexapod_v3.update_camera(self, driver)
+		-- Les roues suivent le hexapod en permanence (meme non pilote), et ne
+		-- tournent que lorsqu'il se deplace effectivement (signed_speed ~= 0).
+		hexapod_v3.update_wheels(self, dtime, signed_speed)
 	end,
 })
 

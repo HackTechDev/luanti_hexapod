@@ -52,13 +52,16 @@ Des que le joueur prend les commandes :
   position courante du node.
 
 **Pourquoi une entite intermediaire plutot que deplacer directement le
-joueur ?** La position d'un joueur est en partie predite localement par le
-client puis corrigee par le serveur ; la re-teleporter a chaque pas de
-simulation via `set_pos()` produit des a-coups visibles. Une entite Lua
-classique (comme le hexapod lui-meme) est en revanche interpolee en douceur
-par le client entre deux mises a jour serveur. En attachant le joueur a une
-telle entite ("camera_rig", invisible et sans collision) et en deplacant
-celle-ci au lieu du joueur, la camera herite de ce mouvement fluide.
+joueur ?** Cote moteur, `ObjectRef:set_pos()` teleporte l'objet et force un
+envoi immediat de sa position au client **sans interpolation**
+(`LuaEntitySAO::setPos` appelle `sendPosition(false, true)`) : l'appeler a
+chaque pas de simulation, que ce soit sur le joueur ou sur une entite,
+produit donc des a-coups constants. La bonne API pour un suivi continu est
+`ObjectRef:move_to(pos, true)`, concue par le moteur pour des "transitions
+visuellement fluides" (l'entite est interpolee normalement entre deux
+positions envoyees). On deplace donc une entite Lua invisible
+("camera_rig", sans collision) via `move_to`, et on y attache le joueur :
+sa vue herite de ce mouvement interpole.
 
 ### A propos des touches "flechees"
 

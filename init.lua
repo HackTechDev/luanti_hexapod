@@ -7,13 +7,12 @@
 -- libre du regard (souris) ; en revanche il perd son propre deplacement
 -- (ZQSD/fleches, saut, gravite) tant qu'il pilote le hexapod.
 --
--- Note technique : la camera n'est PAS deplacee via des appels repetes a
--- `player:set_pos()`. La position d'un joueur est en partie predite en
--- local par le client puis corrigee par le serveur : des `set_pos()`
--- frequents produisent donc des a-coups visibles. On deplace a la place une
--- entite Lua invisible ("camera_rig"), correctement interpolee par le
--- client (comme n'importe quelle entite, y compris le hexapod lui-meme), et
--- on y attache le joueur : il herite ainsi d'un mouvement fluide.
+-- Note technique : la camera n'est ni le joueur teleporte a chaque pas, ni
+-- une entite deplacee via `set_pos()` (les deux forcent une correction de
+-- position sans interpolation cote client, donc des a-coups). On deplace
+-- une entite Lua invisible ("camera_rig") via `move_to(pos, true)`, l'API
+-- prevue par le moteur pour un suivi visuellement fluide, et on y attache
+-- le joueur : sa vue herite alors de ce mouvement interpole.
 
 hexapod_v3 = {}
 
@@ -48,14 +47,22 @@ function hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
 end
 
 -- Deplace la rig-camera du hexapod pour que celui-ci reste centre dans la
--- vue du joueur qui le pilote. La rig est une entite Lua normale : le
--- client l'interpole en douceur entre deux mises a jour, ce qui rend le
--- suivi fluide.
+-- vue du joueur qui le pilote.
+--
+-- Important : on n'utilise PAS `set_pos()` a chaque pas. Cote moteur,
+-- `ObjectRef:set_pos()` teleporte l'entite ET force un envoi immediat de sa
+-- position au client SANS interpolation (voir `LuaEntitySAO::setPos`, qui
+-- appelle `sendPosition(false, true)` -- le premier `false` desactive
+-- l'interpolation cote client) : appeler ca a chaque pas de simulation
+-- produit donc des a-coups constants. `move_to(pos, true)` est concu par le
+-- moteur precisement pour des "transitions visuellement fluides" : la
+-- position cible est mise a jour en continu et le client interpole
+-- normalement entre deux positions envoyees.
 function hexapod_v3.update_camera(self, player)
 	local look_dir = player:get_look_dir()
 	local pod_pos = self.object:get_pos()
 	local target = hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
-	self.camera_rig:set_pos(target)
+	self.camera_rig:move_to(target, true)
 end
 
 function hexapod_v3.start_driving(self, player)

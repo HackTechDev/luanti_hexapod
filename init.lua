@@ -104,7 +104,7 @@ function hexapod_v3.update_wheels(self, dtime, signed_speed)
 		return
 	end
 
-	local angular_speed_deg = math.deg(signed_speed / hexapod_v3.wheel_radius)
+	local angular_speed_deg = -math.deg(signed_speed / hexapod_v3.wheel_radius)
 	self.wheel_spin_deg = (self.wheel_spin_deg + angular_speed_deg * dtime) % 360
 
 	local rotation = { x = self.wheel_spin_deg, y = 0, z = 0 }

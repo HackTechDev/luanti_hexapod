@@ -117,10 +117,14 @@ minetest.register_entity("hexapod_v3:pod", {
 	initial_properties = {
 		visual = "cube",
 		visual_size = { x = 1, y = 1, z = 1 },
+		-- Ordre des faces d'un visual "cube" (identique aux tiles des nodes) :
+		-- +Y (haut), -Y (bas), +X, -X, +Z, -Z. Comme `minetest.yaw_to_dir(0)`
+		-- vaut (0,0,1), la face +Z est celle qui pointe dans la direction
+		-- d'avancee a yaw=0 : c'est donc elle qui recoit la texture "avant".
 		textures = {
 			"hexapod_v3_node.png", "hexapod_v3_node.png",
 			"hexapod_v3_node.png", "hexapod_v3_node.png",
-			"hexapod_v3_node.png", "hexapod_v3_node.png",
+			"hexapod_v3_node_front.png", "hexapod_v3_node.png",
 		},
 		collisionbox = { -0.5, -0.5, -0.5, 0.5, 0.5, 0.5 },
 		physical = true,

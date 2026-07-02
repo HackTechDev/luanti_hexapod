@@ -28,6 +28,11 @@ chaque pas de simulation) :
 - **Gauche** : pivote vers la gauche (rotation sur place).
 - **Droite** : pivote vers la droite (rotation sur place).
 
+La face avant du cube (celle dans laquelle il avance avec **Haut**) porte une
+texture distincte (`hexapod_v3_node_front.png`, fond orange avec un chevron)
+pour qu'on puisse voir d'un coup d'oeil, de l'exterieur, dans quel sens le
+hexapod est oriente.
+
 ### Camera a la troisieme personne
 
 Des que le joueur prend les commandes :
@@ -104,6 +109,7 @@ hexapod_v3/
 ├── init.lua                       # entite, item de pose, logique de pilotage et de camera
 ├── mod.conf                       # declaration du mod
 ├── textures/
-│   └── hexapod_v3_node.png        # texture du hexapod
+│   ├── hexapod_v3_node.png        # texture des faces du hexapod
+│   └── hexapod_v3_node_front.png  # texture de la face avant
 └── README.md
 ```

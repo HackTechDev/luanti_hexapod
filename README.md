@@ -32,22 +32,33 @@ chaque pas de simulation) :
 
 Des que le joueur prend les commandes :
 
-- Il **n'est plus positionne sur le node** : sa position est recalculee a
-  chaque pas de simulation pour rester a distance fixe (`hexapod_v3.camera_distance`,
-  6 noeuds par defaut) derriere son propre regard, de sorte que le hexapod
-  reste **exactement au centre de sa vue**, comme une camera satellite qui
-  orbite autour de lui.
+- Il **n'est plus positionne sur le node** : il est attache a une entite
+  invisible ("camera_rig") repositionnee a chaque pas de simulation pour
+  rester a distance fixe (`hexapod_v3.camera_distance`, 6 noeuds par
+  defaut) derriere son propre regard, de sorte que le hexapod reste
+  **exactement au centre de sa vue**, comme une camera satellite qui orbite
+  autour de lui.
 - Il **garde le controle libre de la souris** : en tournant la tete, il
   change la direction depuis laquelle il observe le hexapod (il peut ainsi
   tourner librement tout autour), le hexapod restant toujours centre.
 - Il **perd son propre deplacement** pendant le pilotage (vitesse de marche,
-  saut et gravite mis a zero via `set_physics_override`), afin que ses
-  touches de direction ne servent qu'a controler le hexapod et non a le
-  faire marcher lui-meme. Sa physique d'origine est restauree des qu'il
-  relache les commandes (ou s'il se deconnecte pendant le pilotage).
+  saut et gravite mis a zero via `set_physics_override`, et position figee
+  par l'attache), afin que ses touches de direction ne servent qu'a
+  controler le hexapod et non a le faire marcher lui-meme. Sa physique
+  d'origine est restauree des qu'il relache les commandes (ou s'il se
+  deconnecte pendant le pilotage).
 - La camera **suit le hexapod en permanence** lors de ses deplacements et
   rotations, puisqu'elle est recalculee a chaque pas a partir de la
   position courante du node.
+
+**Pourquoi une entite intermediaire plutot que deplacer directement le
+joueur ?** La position d'un joueur est en partie predite localement par le
+client puis corrigee par le serveur ; la re-teleporter a chaque pas de
+simulation via `set_pos()` produit des a-coups visibles. Une entite Lua
+classique (comme le hexapod lui-meme) est en revanche interpolee en douceur
+par le client entre deux mises a jour serveur. En attachant le joueur a une
+telle entite ("camera_rig", invisible et sans collision) et en deplacant
+celle-ci au lieu du joueur, la camera herite de ce mouvement fluide.
 
 ### A propos des touches "flechees"
 

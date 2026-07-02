@@ -6,6 +6,14 @@
 -- node et le suit lors de ses deplacements, tout en gardant le controle
 -- libre du regard (souris) ; en revanche il perd son propre deplacement
 -- (ZQSD/fleches, saut, gravite) tant qu'il pilote le hexapod.
+--
+-- Note technique : la camera n'est PAS deplacee via des appels repetes a
+-- `player:set_pos()`. La position d'un joueur est en partie predite en
+-- local par le client puis corrigee par le serveur : des `set_pos()`
+-- frequents produisent donc des a-coups visibles. On deplace a la place une
+-- entite Lua invisible ("camera_rig"), correctement interpolee par le
+-- client (comme n'importe quelle entite, y compris le hexapod lui-meme), et
+-- on y attache le joueur : il herite ainsi d'un mouvement fluide.
 
 hexapod_v3 = {}
 
@@ -13,9 +21,9 @@ hexapod_v3 = {}
 hexapod_v3.forward_speed = 4          -- noeuds par seconde
 hexapod_v3.turn_speed = math.rad(90)  -- radians par seconde
 
--- Distance a laquelle la camera (le joueur) est maintenue derriere son
--- propre regard, de sorte que le hexapod reste toujours exactement au
--- centre de la vue, quelle que soit la direction observee.
+-- Distance a laquelle la camera est maintenue derriere le regard du joueur,
+-- de sorte que le hexapod reste toujours exactement au centre de la vue,
+-- quelle que soit la direction observee.
 hexapod_v3.camera_distance = 6
 
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
@@ -26,18 +34,28 @@ hexapod_v3.pods = {}
 -- pilote, pour la restaurer telle quelle a la fin.
 hexapod_v3.saved_physics = {}
 
--- Repositionne le joueur `player` de sorte que `self` (le hexapod) soit
--- exactement au centre de son champ de vision, a distance fixe.
-function hexapod_v3.update_camera(self, player)
-	local look_dir = player:get_look_dir()
-	local pod_pos = self.object:get_pos()
+-- Calcule la position (position du pied du joueur) a laquelle la camera
+-- doit se trouver pour que `pod_pos` soit exactement au centre de la vue,
+-- a distance fixe, selon la direction actuellement regardee par le joueur.
+function hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
 	local eye_pos = vector.subtract(pod_pos, vector.multiply(look_dir, hexapod_v3.camera_distance))
 
 	local props = player:get_properties()
 	local eye_height = (props and props.eye_height) or 1.625
 	eye_pos.y = eye_pos.y - eye_height
 
-	player:set_pos(eye_pos)
+	return eye_pos
+end
+
+-- Deplace la rig-camera du hexapod pour que celui-ci reste centre dans la
+-- vue du joueur qui le pilote. La rig est une entite Lua normale : le
+-- client l'interpole en douceur entre deux mises a jour, ce qui rend le
+-- suivi fluide.
+function hexapod_v3.update_camera(self, player)
+	local look_dir = player:get_look_dir()
+	local pod_pos = self.object:get_pos()
+	local target = hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
+	self.camera_rig:set_pos(target)
 end
 
 function hexapod_v3.start_driving(self, player)
@@ -45,7 +63,12 @@ function hexapod_v3.start_driving(self, player)
 	self.driver = player
 	hexapod_v3.saved_physics[name] = player:get_physics_override()
 	player:set_physics_override({ speed = 0, jump = 0, gravity = 0 })
-	hexapod_v3.update_camera(self, player)
+
+	local look_dir = player:get_look_dir()
+	local pod_pos = self.object:get_pos()
+	local target = hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
+	self.camera_rig = minetest.add_entity(target, "hexapod_v3:camera_rig")
+	player:set_attach(self.camera_rig, "", { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 0 })
 end
 
 function hexapod_v3.stop_driving(self, player)
@@ -58,8 +81,30 @@ function hexapod_v3.stop_driving(self, player)
 	if self.driver == player then
 		self.driver = nil
 	end
+	player:set_detach()
+	if self.camera_rig then
+		self.camera_rig:remove()
+		self.camera_rig = nil
+	end
 	self.object:set_velocity({ x = 0, y = 0, z = 0 })
 end
+
+-- Entite invisible (taille nulle) qui sert de support de camera : le
+-- joueur qui pilote un hexapod y est attache, et c'est elle qu'on deplace
+-- chaque pas de simulation pour suivre le hexapod. Etant une entite comme
+-- une autre, le client l'interpole en douceur entre deux positions.
+minetest.register_entity("hexapod_v3:camera_rig", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = { x = 0, y = 0, z = 0 },
+		physical = false,
+		collide_with_objects = false,
+		collisionbox = { 0, 0, 0, 0, 0, 0 },
+		pointable = false,
+		static_save = false,
+		textures = {},
+	},
+})
 
 minetest.register_entity("hexapod_v3:pod", {
 	initial_properties = {
@@ -78,6 +123,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	},
 
 	driver = nil,
+	camera_rig = nil,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
@@ -163,6 +209,10 @@ minetest.register_on_leaveplayer(function(player)
 	for pod in pairs(hexapod_v3.pods) do
 		if pod.driver == player then
 			pod.driver = nil
+			if pod.camera_rig then
+				pod.camera_rig:remove()
+				pod.camera_rig = nil
+			end
 		end
 	end
 	hexapod_v3.saved_physics[name] = nil

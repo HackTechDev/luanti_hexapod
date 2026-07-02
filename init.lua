@@ -31,6 +31,11 @@ hexapod_v3.wheel_offset = 0.65  -- distance au centre du hexapod, en noeuds
 hexapod_v3.wheel_radius = 0.3   -- rayon utilise pour convertir vitesse -> vitesse de rotation
 hexapod_v3.wheel_size = 0.35    -- taille visuelle des roues
 
+-- Son de "moteur" joue en boucle tant que le hexapod avance (touche Haut).
+hexapod_v3.engine_sound = "hexapod_v3_engine"
+hexapod_v3.engine_sound_gain = 0.5
+hexapod_v3.engine_sound_max_hear_distance = 16
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -112,6 +117,27 @@ function hexapod_v3.update_wheels(self, dtime, signed_speed)
 		{ x = hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
 	self.wheel_left:set_attach(self.object, "",
 		{ x = -hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
+end
+
+-- Joue le son de moteur en boucle tant que le hexapod avance (signed_speed
+-- strictement positif), et l'arrete des qu'il ne va plus vers l'avant
+-- (arret, marche arriere ou pivot). Le son est positionne sur l'entite
+-- (`object = self.object`) : le moteur audio du client le repositionne
+-- lui-meme a chaque image tant qu'il joue, pas besoin de le relancer.
+function hexapod_v3.update_engine_sound(self, signed_speed)
+	local moving_forward = signed_speed > 0
+
+	if moving_forward and not self.engine_sound_handle then
+		self.engine_sound_handle = minetest.sound_play(hexapod_v3.engine_sound, {
+			object = self.object,
+			gain = hexapod_v3.engine_sound_gain,
+			max_hear_distance = hexapod_v3.engine_sound_max_hear_distance,
+			loop = true,
+		})
+	elseif not moving_forward and self.engine_sound_handle then
+		minetest.sound_stop(self.engine_sound_handle)
+		self.engine_sound_handle = nil
+	end
 end
 
 function hexapod_v3.start_driving(self, player)
@@ -206,6 +232,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	wheel_right = nil,
 	wheel_left = nil,
 	wheel_spin_deg = 0,
+	engine_sound_handle = nil,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
@@ -229,6 +256,10 @@ minetest.register_entity("hexapod_v3:pod", {
 		if self.wheel_left then
 			self.wheel_left:remove()
 			self.wheel_left = nil
+		end
+		if self.engine_sound_handle then
+			minetest.sound_stop(self.engine_sound_handle)
+			self.engine_sound_handle = nil
 		end
 		hexapod_v3.pods[self] = nil
 	end,
@@ -286,6 +317,7 @@ minetest.register_entity("hexapod_v3:pod", {
 		-- Les roues suivent le hexapod en permanence (meme non pilote), et ne
 		-- tournent que lorsqu'il se deplace effectivement (signed_speed ~= 0).
 		hexapod_v3.update_wheels(self, dtime, signed_speed)
+		hexapod_v3.update_engine_sound(self, signed_speed)
 	end,
 })
 

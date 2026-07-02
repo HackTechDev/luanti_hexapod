@@ -57,6 +57,15 @@ dictee par le parent + l'offset donne a `set_attach`) ; on fait donc
 tourner les roues en rappelant `set_attach` a chaque pas avec une
 rotation mise a jour (position laterale inchangee).
 
+### Son de moteur
+
+Un son de moteur (`sounds/hexapod_v3_engine.ogg`, boucle synthetisee de
+0,4 s) est joue tant que le hexapod avance (touche **Haut**), et stoppe des
+qu'il ne va plus vers l'avant (arret, marche arriere ou pivot). Le son est
+attache a l'entite (`object = self.object`), donc positionne et suivi
+automatiquement par le moteur audio. Reglable via
+`hexapod_v3.engine_sound_gain` et `hexapod_v3.engine_sound_max_hear_distance`.
+
 ### Camera a la troisieme personne
 
 Des que le joueur prend les commandes :
@@ -136,5 +145,7 @@ hexapod_v3/
 │   ├── hexapod_v3_node.png        # texture des faces du hexapod
 │   ├── hexapod_v3_node_front.png  # texture de la face avant
 │   └── hexapod_v3_wheel.png       # texture des roues
+├── sounds/
+│   └── hexapod_v3_engine.ogg      # son de moteur (boucle)
 └── README.md
 ```

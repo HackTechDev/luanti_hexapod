@@ -77,13 +77,18 @@ en partant de celui immediatement derriere la tete
 (`hexapod_v3.tail_segments[1]`, `[3]`, `[5]`, ...) : avec ces valeurs par
 defaut, un segment du train reste donc libre entre deux paires de pattes
 plutot que d'etre colle a la precedente. Chaque patte est une chaine de
-6 nodes (`hexapod_v3:leg_part`), **tous de la meme taille que les nodes
-du corps** (`hexapod_v3.tail_size`), suspendue verticalement sous son
-flanc d'attache :
+6 nodes, **tous de la meme taille que les nodes du corps**
+(`hexapod_v3.tail_size`), suspendue verticalement sous son flanc
+d'attache :
 
 ```
 Corps -> Node de liaison -> Femur (2 noeuds) -> Node de liaison -> Tibia (2 noeuds)
 ```
+
+Les deux nodes de liaison (corps<->femur et femur<->tibia) utilisent une
+texture distincte (`hexapod_v3:leg_joint`, `hexapod_v3_joint.png`, gris
+avec un rivet central) pour bien marquer les articulations, alors que le
+femur et le tibia reprennent la texture du corps (`hexapod_v3:leg_part`).
 
 Comme le train, c'est purement statique : chaque node est attache une
 fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
@@ -190,7 +195,8 @@ hexapod_v3/
 ├── textures/
 │   ├── hexapod_v3_node.png        # texture des faces du hexapod
 │   ├── hexapod_v3_node_front.png  # texture de la face avant
-│   └── hexapod_v3_wheel.png       # texture des roues
+│   ├── hexapod_v3_wheel.png       # texture des roues
+│   └── hexapod_v3_joint.png       # texture des nodes de jointure des pattes
 ├── sounds/
 │   ├── hexapod_v3_engine.ogg      # son de moteur (boucle)
 │   └── hexapod_v3_turn.ogg        # son de direction (boucle)

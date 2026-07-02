@@ -132,13 +132,12 @@ function hexapod_v3.spawn_tail(self)
 	end
 end
 
--- Cree une piece de patte (connecteur, femur ou tibia), attachee a
--- `parent_object` avec un decalage local `offset` ({x,y,z}, en noeuds).
--- Meme taille que les nodes du corps (`hexapod_v3:leg_part` reprend
--- `hexapod_v3.tail_size`). Statique comme le train : un seul `set_attach`
--- suffit.
-function hexapod_v3.spawn_leg_part(parent_object, parent_pos, offset)
-	local part = minetest.add_entity(parent_pos, "hexapod_v3:leg_part")
+-- Cree une piece de patte (`entity_name` : segment ou jointure), attachee
+-- a `parent_object` avec un decalage local `offset` ({x,y,z}, en noeuds).
+-- Meme taille que les nodes du corps (`hexapod_v3.tail_size`). Statique
+-- comme le train : un seul `set_attach` suffit.
+function hexapod_v3.spawn_leg_part(entity_name, parent_object, parent_pos, offset)
+	local part = minetest.add_entity(parent_pos, entity_name)
 	part:set_attach(parent_object, "",
 		{ x = offset.x * 10, y = offset.y * 10, z = offset.z * 10 },
 		{ x = 0, y = 0, z = 0 })
@@ -147,22 +146,30 @@ end
 
 -- Construit une patte complete (connecteur -> femur -> connecteur -> tibia)
 -- suspendue sous le flanc (`side` = 1 pour droite, -1 pour gauche) du
--- premier segment du train (celui immediatement derriere la tete), qui
--- sert de parent a toutes les pieces. Chaque piece est un node de la meme
--- taille que le corps (`hexapod_v3.tail_size`), colle directement sous le
--- precedent (centres espaces d'exactement `tail_size`).
+-- segment "hanche" qui sert de parent a toutes les pieces. Chaque piece
+-- est un node de la meme taille que le corps (`hexapod_v3.tail_size`),
+-- colle directement sous le precedent (centres espaces d'exactement
+-- `tail_size`). Les deux nodes de jointure (corps<->femur et
+-- femur<->tibia) utilisent une entite/texture distincte
+-- (`hexapod_v3:leg_joint`) de celle des segments de femur/tibia
+-- (`hexapod_v3:leg_part`, texture du corps).
 function hexapod_v3.spawn_leg(self, hip_object, side)
 	local s = hexapod_v3.tail_size
 	local x = side * s  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
 	local hip_pos = hip_object:get_pos()
 
-	-- Ordre de la chaine : 1 connecteur, N nodes de femur, 1 connecteur,
+	-- Ordre de la chaine : jointure, N nodes de femur, jointure,
 	-- N nodes de tibia (N = hexapod_v3.leg_segment_height).
-	local chain = { 1, hexapod_v3.leg_segment_height, 1, hexapod_v3.leg_segment_height }
+	local chain = {
+		{ entity = "hexapod_v3:leg_joint", count = 1 },
+		{ entity = "hexapod_v3:leg_part", count = hexapod_v3.leg_segment_height },
+		{ entity = "hexapod_v3:leg_joint", count = 1 },
+		{ entity = "hexapod_v3:leg_part", count = hexapod_v3.leg_segment_height },
+	}
 	local y = 0
-	for _, count in ipairs(chain) do
-		for _ = 1, count do
-			local part = hexapod_v3.spawn_leg_part(hip_object, hip_pos, { x = x, y = y, z = 0 })
+	for _, link in ipairs(chain) do
+		for _ = 1, link.count do
+			local part = hexapod_v3.spawn_leg_part(link.entity, hip_object, hip_pos, { x = x, y = y, z = 0 })
 			table.insert(self.leg_parts, part)
 			y = y - s
 		end
@@ -337,10 +344,8 @@ minetest.register_entity("hexapod_v3:tail_segment", {
 	},
 })
 
--- Piece de patte (connecteur, femur ou tibia) attachee au premier segment
--- du train (voir `hexapod_v3.spawn_leg`). Un seul type d'entite reutilise
--- pour les 3 sortes de pieces, toutes de la meme taille que les nodes du
--- corps (`hexapod_v3.tail_size`).
+-- Segment de femur/tibia (voir `hexapod_v3.spawn_leg`), texture du corps.
+-- Meme taille que les nodes du corps (`hexapod_v3.tail_size`).
 minetest.register_entity("hexapod_v3:leg_part", {
 	initial_properties = {
 		visual = "cube",
@@ -349,6 +354,26 @@ minetest.register_entity("hexapod_v3:leg_part", {
 			"hexapod_v3_node.png", "hexapod_v3_node.png",
 			"hexapod_v3_node.png", "hexapod_v3_node.png",
 			"hexapod_v3_node.png", "hexapod_v3_node.png",
+		},
+		physical = false,
+		collide_with_objects = false,
+		collisionbox = { 0, 0, 0, 0, 0, 0 },
+		pointable = false,
+		static_save = false,
+	},
+})
+
+-- Node de jointure (corps<->femur et femur<->tibia, voir
+-- `hexapod_v3.spawn_leg`), texture distincte du corps pour marquer les
+-- articulations. Meme taille que les nodes du corps (`hexapod_v3.tail_size`).
+minetest.register_entity("hexapod_v3:leg_joint", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = { x = hexapod_v3.tail_size, y = hexapod_v3.tail_size, z = hexapod_v3.tail_size },
+		textures = {
+			"hexapod_v3_joint.png", "hexapod_v3_joint.png",
+			"hexapod_v3_joint.png", "hexapod_v3_joint.png",
+			"hexapod_v3_joint.png", "hexapod_v3_joint.png",
 		},
 		physical = false,
 		collide_with_objects = false,

@@ -46,10 +46,13 @@ hexapod_v3.turn_sound_max_hear_distance = 16
 hexapod_v3.tail_count = 5
 hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
 
--- Pattes (gauche/droite) attachees au premier segment du train, juste
--- derriere la tete. Chaine : corps -> connecteur -> femur -> connecteur ->
--- tibia, suspendue verticalement sous le point d'attache. Chaque piece est
--- un node de la meme taille que ceux du corps (`hexapod_v3.tail_size`).
+-- Pattes (gauche/droite), une paire par segment "hanche" du train, en
+-- partant de celui immediatement derriere la tete. Chaine : corps ->
+-- connecteur -> femur -> connecteur -> tibia, suspendue verticalement
+-- sous le point d'attache. Chaque piece est un node de la meme taille que
+-- ceux du corps (`hexapod_v3.tail_size`).
+hexapod_v3.leg_pair_count = 3       -- un hexapod a 6 pattes, donc 3 paires
+hexapod_v3.leg_pair_spacing = 2     -- ecart (en segments du train) entre deux hanches -> 1 segment vide entre deux paires de pattes
 hexapod_v3.leg_segment_height = 2  -- hauteur du femur et du tibia, en nombre de noeuds
 
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
@@ -166,13 +169,24 @@ function hexapod_v3.spawn_leg(self, hip_object, side)
 	end
 end
 
--- Construit les deux pattes (gauche et droite), symetriques, attachees au
--- premier segment du train (juste derriere la tete).
+-- Construit les `hexapod_v3.leg_pair_count` paires de pattes (gauche et
+-- droite, symetriques), une paire tous les `hexapod_v3.leg_pair_spacing`
+-- segments du train, en partant de celui immediatement derriere la tete
+-- (hexapod_v3.tail_segments[1], [1 + spacing], [1 + 2*spacing], ...).
+-- Avec les valeurs par defaut (spacing = 2), un segment du train reste
+-- donc libre entre deux paires de pattes plutot que d'etre colle a la
+-- precedente.
 function hexapod_v3.spawn_legs(self)
 	self.leg_parts = {}
-	local hip_object = self.tail_segments[1]
-	hexapod_v3.spawn_leg(self, hip_object, 1)   -- droite
-	hexapod_v3.spawn_leg(self, hip_object, -1)  -- gauche
+	for i = 1, hexapod_v3.leg_pair_count do
+		local segment_index = 1 + (i - 1) * hexapod_v3.leg_pair_spacing
+		local hip_object = self.tail_segments[segment_index]
+		if not hip_object then
+			break
+		end
+		hexapod_v3.spawn_leg(self, hip_object, 1)   -- droite
+		hexapod_v3.spawn_leg(self, hip_object, -1)  -- gauche
+	end
 end
 
 -- Fait tourner les roues autour de leur axe (rotation.x, en degres)

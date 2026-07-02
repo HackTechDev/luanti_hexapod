@@ -70,11 +70,16 @@ et `hexapod_v3.tail_size`.
 
 ### Pattes
 
-Deux pattes symetriques (gauche/droite) sont **attachees** au premier
-segment du train, c'est-a-dire au node situe immediatement derriere la
-tete. Chaque patte est une chaine de 6 nodes (`hexapod_v3:leg_part`),
-**tous de la meme taille que les nodes du corps** (`hexapod_v3.tail_size`),
-suspendue verticalement sous son flanc d'attache :
+`hexapod_v3.leg_pair_count` paires de pattes symetriques (gauche/droite,
+3 par defaut -- un hexapod ayant 6 pattes) sont **attachees**, une paire
+tous les `hexapod_v3.leg_pair_spacing` segments du train (2 par defaut),
+en partant de celui immediatement derriere la tete
+(`hexapod_v3.tail_segments[1]`, `[3]`, `[5]`, ...) : avec ces valeurs par
+defaut, un segment du train reste donc libre entre deux paires de pattes
+plutot que d'etre colle a la precedente. Chaque patte est une chaine de
+6 nodes (`hexapod_v3:leg_part`), **tous de la meme taille que les nodes
+du corps** (`hexapod_v3.tail_size`), suspendue verticalement sous son
+flanc d'attache :
 
 ```
 Corps -> Node de liaison -> Femur (2 noeuds) -> Node de liaison -> Tibia (2 noeuds)
@@ -82,11 +87,13 @@ Corps -> Node de liaison -> Femur (2 noeuds) -> Node de liaison -> Tibia (2 noeu
 
 Comme le train, c'est purement statique : chaque node est attache une
 fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
-"hanche" (le premier segment du train), avec un decalage vertical qui
-augmente d'exactement `hexapod_v3.tail_size` a chaque node de la chaine
-pour qu'ils restent colles les uns sous les autres
-(`hexapod_v3.spawn_leg`). Le nombre de nodes du femur et du tibia se
-regle via `hexapod_v3.leg_segment_height` (2 par defaut).
+"hanche" qui lui correspond (`hexapod_v3.spawn_legs` parcourt les
+segments du train espaces de `leg_pair_spacing`), avec un decalage
+vertical qui augmente d'exactement `hexapod_v3.tail_size` a chaque node
+de la chaine pour qu'ils restent colles les uns sous les autres
+(`hexapod_v3.spawn_leg`).
+Le nombre de nodes du femur et du tibia se regle via
+`hexapod_v3.leg_segment_height` (2 par defaut).
 
 ### Sons
 

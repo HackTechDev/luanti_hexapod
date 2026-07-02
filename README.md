@@ -59,14 +59,35 @@ rotation mise a jour (position laterale inchangee).
 
 ### Train arriere
 
-Une rangee de `hexapod_v3.tail_count` (4 par defaut) nodes decoratifs
-(`hexapod_v3:tail_segment`, memes textures que le corps) est **attachee**
-a la queue leu leu derriere le hexapod (le long de l'axe -Z, colle a la
-face arriere), un peu comme un petit train. Purement statique : un seul
-`set_attach` par segment a la creation suffit, ces segments ne tournant
-pas sur eux-memes (contrairement aux roues) -- ils suivent la position et
-le cap du hexapod sans latence grace a l'attachement, comme les roues.
-Reglable via `hexapod_v3.tail_count` et `hexapod_v3.tail_size`.
+Une rangee de `hexapod_v3.tail_count` nodes decoratifs (`hexapod_v3:tail_segment`,
+memes textures que le corps) est **attachee** a la queue leu leu derriere
+le hexapod (le long de l'axe -Z, colle a la face arriere), un peu comme un
+petit train. Purement statique : un seul `set_attach` par segment a la
+creation suffit, ces segments ne tournant pas sur eux-memes (contrairement
+aux roues) -- ils suivent la position et le cap du hexapod sans latence
+grace a l'attachement, comme les roues. Reglable via `hexapod_v3.tail_count`
+et `hexapod_v3.tail_size`.
+
+### Pattes
+
+Deux pattes symetriques (gauche/droite) sont **attachees** au premier
+segment du train, c'est-a-dire au node situe immediatement derriere la
+tete. Chaque patte est une chaine de 4 pieces (`hexapod_v3:leg_part`,
+memes textures que le corps, taille ajustee via `set_properties` a la
+creation) suspendue verticalement sous son flanc d'attache :
+
+```
+Corps -> Node de liaison -> Femur (2 noeuds) -> Node de liaison -> Tibia (2 noeuds)
+```
+
+Comme le train, c'est purement statique : chaque piece est attachee une
+fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
+"hanche" (le premier segment du train), avec un decalage vertical calcule
+pour que chaque piece soit collee sous la precedente
+(`hexapod_v3.spawn_leg`). Reglable via `hexapod_v3.leg_connector_size`
+(taille des deux nodes de liaison), `hexapod_v3.leg_segment_height`
+(hauteur du femur et du tibia) et `hexapod_v3.leg_femur_thickness` /
+`hexapod_v3.leg_tibia_thickness` (epaisseur de ces deux segments).
 
 ### Sons
 

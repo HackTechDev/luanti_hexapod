@@ -46,6 +46,14 @@ hexapod_v3.turn_sound_max_hear_distance = 16
 hexapod_v3.tail_count = 5
 hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
 
+-- Pattes (gauche/droite) attachees au premier segment du train, juste
+-- derriere la tete. Chaine : corps -> connecteur -> femur -> connecteur ->
+-- tibia, suspendue verticalement sous le point d'attache.
+hexapod_v3.leg_connector_size = 0.3  -- cube des deux nodes de liaison
+hexapod_v3.leg_segment_height = 2    -- hauteur du femur et du tibia, en noeuds
+hexapod_v3.leg_femur_thickness = 0.25
+hexapod_v3.leg_tibia_thickness = 0.22
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -121,6 +129,64 @@ function hexapod_v3.spawn_tail(self)
 		segment:set_attach(pod_object, "", { x = 0, y = 0, z = offset_z * 10 }, { x = 0, y = 0, z = 0 })
 		table.insert(self.tail_segments, segment)
 	end
+end
+
+-- Cree une piece de patte (connecteur, femur ou tibia), attachee a
+-- `parent_object` avec un decalage local `offset` ({x,y,z}, en noeuds) et
+-- une taille visuelle `size` ({x,y,z}, en noeuds). Statique comme le train :
+-- un seul `set_attach` suffit.
+function hexapod_v3.spawn_leg_part(parent_object, parent_pos, offset, size)
+	local part = minetest.add_entity(parent_pos, "hexapod_v3:leg_part")
+	part:set_properties({ visual_size = size })
+	part:set_attach(parent_object, "",
+		{ x = offset.x * 10, y = offset.y * 10, z = offset.z * 10 },
+		{ x = 0, y = 0, z = 0 })
+	return part
+end
+
+-- Construit une patte complete (connecteur -> femur -> connecteur -> tibia)
+-- suspendue sous le flanc (`side` = 1 pour droite, -1 pour gauche) du
+-- premier segment du train (celui immediatement derriere la tete), qui
+-- sert de parent a toutes les pieces.
+function hexapod_v3.spawn_leg(self, hip_object, side)
+	local c = hexapod_v3.leg_connector_size
+	local h = hexapod_v3.leg_segment_height
+	local x = side * (hexapod_v3.tail_size / 2 + c / 2)
+
+	-- Centres verticaux successifs : chaque piece est collee sous la
+	-- precedente (corps -> connecteur -> femur -> connecteur -> tibia).
+	local y_connector1 = 0
+	local y_femur = y_connector1 - c / 2 - h / 2
+	local y_connector2 = y_femur - h / 2 - c / 2
+	local y_tibia = y_connector2 - c / 2 - h / 2
+
+	local hip_pos = hip_object:get_pos()
+
+	local parts = {
+		hexapod_v3.spawn_leg_part(hip_object, hip_pos,
+			{ x = x, y = y_connector1, z = 0 }, { x = c, y = c, z = c }),
+		hexapod_v3.spawn_leg_part(hip_object, hip_pos,
+			{ x = x, y = y_femur, z = 0 },
+			{ x = hexapod_v3.leg_femur_thickness, y = h, z = hexapod_v3.leg_femur_thickness }),
+		hexapod_v3.spawn_leg_part(hip_object, hip_pos,
+			{ x = x, y = y_connector2, z = 0 }, { x = c, y = c, z = c }),
+		hexapod_v3.spawn_leg_part(hip_object, hip_pos,
+			{ x = x, y = y_tibia, z = 0 },
+			{ x = hexapod_v3.leg_tibia_thickness, y = h, z = hexapod_v3.leg_tibia_thickness }),
+	}
+
+	for _, part in ipairs(parts) do
+		table.insert(self.leg_parts, part)
+	end
+end
+
+-- Construit les deux pattes (gauche et droite), symetriques, attachees au
+-- premier segment du train (juste derriere la tete).
+function hexapod_v3.spawn_legs(self)
+	self.leg_parts = {}
+	local hip_object = self.tail_segments[1]
+	hexapod_v3.spawn_leg(self, hip_object, 1)   -- droite
+	hexapod_v3.spawn_leg(self, hip_object, -1)  -- gauche
 end
 
 -- Fait tourner les roues autour de leur axe (rotation.x, en degres)
@@ -271,6 +337,28 @@ minetest.register_entity("hexapod_v3:tail_segment", {
 	},
 })
 
+-- Piece de patte (connecteur, femur ou tibia) attachee au premier segment
+-- du train (voir `hexapod_v3.spawn_leg`). Un seul type d'entite reutilise
+-- pour les 3 sortes de pieces : la taille visuelle est ajustee au moment
+-- de sa creation via `set_properties`.
+minetest.register_entity("hexapod_v3:leg_part", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = { x = hexapod_v3.leg_connector_size, y = hexapod_v3.leg_connector_size,
+			z = hexapod_v3.leg_connector_size },
+		textures = {
+			"hexapod_v3_node.png", "hexapod_v3_node.png",
+			"hexapod_v3_node.png", "hexapod_v3_node.png",
+			"hexapod_v3_node.png", "hexapod_v3_node.png",
+		},
+		physical = false,
+		collide_with_objects = false,
+		collisionbox = { 0, 0, 0, 0, 0, 0 },
+		pointable = false,
+		static_save = false,
+	},
+})
+
 minetest.register_entity("hexapod_v3:pod", {
 	initial_properties = {
 		visual = "cube",
@@ -299,6 +387,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	engine_sound_handle = nil,
 	turn_sound_handle = nil,
 	tail_segments = nil,
+	leg_parts = nil,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
@@ -311,6 +400,7 @@ minetest.register_entity("hexapod_v3:pod", {
 		hexapod_v3.attach_wheel(self.wheel_left, self.object, -1)
 
 		hexapod_v3.spawn_tail(self)
+		hexapod_v3.spawn_legs(self)
 	end,
 
 	on_deactivate = function(self)
@@ -338,6 +428,12 @@ minetest.register_entity("hexapod_v3:pod", {
 				segment:remove()
 			end
 			self.tail_segments = nil
+		end
+		if self.leg_parts then
+			for _, part in ipairs(self.leg_parts) do
+				part:remove()
+			end
+			self.leg_parts = nil
 		end
 		hexapod_v3.pods[self] = nil
 	end,

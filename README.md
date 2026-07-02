@@ -57,14 +57,22 @@ dictee par le parent + l'offset donne a `set_attach`) ; on fait donc
 tourner les roues en rappelant `set_attach` a chaque pas avec une
 rotation mise a jour (position laterale inchangee).
 
-### Son de moteur
+### Sons
 
-Un son de moteur (`sounds/hexapod_v3_engine.ogg`, boucle synthetisee de
-0,4 s) est joue tant que le hexapod avance (touche **Haut**), et stoppe des
-qu'il ne va plus vers l'avant (arret, marche arriere ou pivot). Le son est
-attache a l'entite (`object = self.object`), donc positionne et suivi
-automatiquement par le moteur audio. Reglable via
-`hexapod_v3.engine_sound_gain` et `hexapod_v3.engine_sound_max_hear_distance`.
+Deux sons en boucle (fonction generique `hexapod_v3.set_looping_sound`),
+tous deux attaches a l'entite (`object = self.object`, donc positionnes et
+suivis automatiquement par le moteur audio) :
+
+- Un son de **moteur** (`sounds/hexapod_v3_engine.ogg`, boucle synthetisee
+  de 0,4 s) joue tant que le hexapod avance (touche **Haut**), et stoppe
+  des qu'il ne va plus vers l'avant (arret, marche arriere ou pivot seul).
+  Reglable via `hexapod_v3.engine_sound_gain` et
+  `hexapod_v3.engine_sound_max_hear_distance`.
+- Un son de **direction** (`sounds/hexapod_v3_turn.ogg`, boucle synthetisee
+  de 0,3 s, plus aigu que le moteur) joue tant que le hexapod pivote
+  (**Gauche** ou **Droite**), y compris en meme temps que le son de moteur
+  s'il avance/recule en tournant. Reglable via `hexapod_v3.turn_sound_gain`
+  et `hexapod_v3.turn_sound_max_hear_distance`.
 
 ### Camera a la troisieme personne
 
@@ -146,6 +154,7 @@ hexapod_v3/
 │   ├── hexapod_v3_node_front.png  # texture de la face avant
 │   └── hexapod_v3_wheel.png       # texture des roues
 ├── sounds/
-│   └── hexapod_v3_engine.ogg      # son de moteur (boucle)
+│   ├── hexapod_v3_engine.ogg      # son de moteur (boucle)
+│   └── hexapod_v3_turn.ogg        # son de direction (boucle)
 └── README.md
 ```

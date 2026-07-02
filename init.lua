@@ -36,6 +36,11 @@ hexapod_v3.engine_sound = "hexapod_v3_engine"
 hexapod_v3.engine_sound_gain = 0.5
 hexapod_v3.engine_sound_max_hear_distance = 16
 
+-- Son de "direction" joue en boucle tant que le hexapod pivote (Gauche/Droite).
+hexapod_v3.turn_sound = "hexapod_v3_turn"
+hexapod_v3.turn_sound_gain = 0.4
+hexapod_v3.turn_sound_max_hear_distance = 16
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -119,25 +124,42 @@ function hexapod_v3.update_wheels(self, dtime, signed_speed)
 		{ x = -hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
 end
 
--- Joue le son de moteur en boucle tant que le hexapod avance (signed_speed
--- strictement positif), et l'arrete des qu'il ne va plus vers l'avant
--- (arret, marche arriere ou pivot). Le son est positionne sur l'entite
--- (`object = self.object`) : le moteur audio du client le repositionne
--- lui-meme a chaque image tant qu'il joue, pas besoin de le relancer.
-function hexapod_v3.update_engine_sound(self, signed_speed)
-	local moving_forward = signed_speed > 0
-
-	if moving_forward and not self.engine_sound_handle then
-		self.engine_sound_handle = minetest.sound_play(hexapod_v3.engine_sound, {
+-- Demarre/arrete un son en boucle attache au hexapod selon une condition
+-- booleenne (`active`), en se souvenant de son handle dans le champ
+-- `self[handle_field]` pour pouvoir l'arreter plus tard. Utilise pour le
+-- son de moteur (avance) et le son de direction (pivote). Le son est
+-- positionne sur l'entite (`object = self.object`) : le moteur audio du
+-- client le repositionne lui-meme a chaque image tant qu'il joue, pas
+-- besoin de le relancer pour le faire suivre le hexapod.
+function hexapod_v3.set_looping_sound(self, handle_field, active, sound_name, gain, max_hear_distance)
+	if active and not self[handle_field] then
+		self[handle_field] = minetest.sound_play(sound_name, {
 			object = self.object,
-			gain = hexapod_v3.engine_sound_gain,
-			max_hear_distance = hexapod_v3.engine_sound_max_hear_distance,
+			gain = gain,
+			max_hear_distance = max_hear_distance,
 			loop = true,
 		})
-	elseif not moving_forward and self.engine_sound_handle then
-		minetest.sound_stop(self.engine_sound_handle)
-		self.engine_sound_handle = nil
+	elseif not active and self[handle_field] then
+		minetest.sound_stop(self[handle_field])
+		self[handle_field] = nil
 	end
+end
+
+-- Joue le son de moteur tant que le hexapod avance (signed_speed
+-- strictement positif), et l'arrete des qu'il ne va plus vers l'avant
+-- (arret, marche arriere ou pivot).
+function hexapod_v3.update_engine_sound(self, signed_speed)
+	hexapod_v3.set_looping_sound(self, "engine_sound_handle", signed_speed > 0,
+		hexapod_v3.engine_sound, hexapod_v3.engine_sound_gain,
+		hexapod_v3.engine_sound_max_hear_distance)
+end
+
+-- Joue le son de direction tant que le hexapod pivote (Gauche ou Droite),
+-- que ce soit sur place ou en avancant/reculant en meme temps.
+function hexapod_v3.update_turn_sound(self, turning)
+	hexapod_v3.set_looping_sound(self, "turn_sound_handle", turning,
+		hexapod_v3.turn_sound, hexapod_v3.turn_sound_gain,
+		hexapod_v3.turn_sound_max_hear_distance)
 end
 
 function hexapod_v3.start_driving(self, player)
@@ -233,6 +255,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	wheel_left = nil,
 	wheel_spin_deg = 0,
 	engine_sound_handle = nil,
+	turn_sound_handle = nil,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
@@ -261,6 +284,10 @@ minetest.register_entity("hexapod_v3:pod", {
 			minetest.sound_stop(self.engine_sound_handle)
 			self.engine_sound_handle = nil
 		end
+		if self.turn_sound_handle then
+			minetest.sound_stop(self.turn_sound_handle)
+			self.turn_sound_handle = nil
+		end
 		hexapod_v3.pods[self] = nil
 	end,
 
@@ -285,6 +312,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	on_step = function(self, dtime)
 		local driver = self.driver
 		local signed_speed = 0
+		local turning = false
 
 		if driver and driver:is_player() then
 			local ctrl = driver:get_player_control()
@@ -292,9 +320,11 @@ minetest.register_entity("hexapod_v3:pod", {
 
 			if ctrl.left then
 				yaw = yaw + hexapod_v3.turn_speed * dtime
+				turning = true
 			end
 			if ctrl.right then
 				yaw = yaw - hexapod_v3.turn_speed * dtime
+				turning = true
 			end
 			self.object:set_yaw(yaw)
 
@@ -318,6 +348,7 @@ minetest.register_entity("hexapod_v3:pod", {
 		-- tournent que lorsqu'il se deplace effectivement (signed_speed ~= 0).
 		hexapod_v3.update_wheels(self, dtime, signed_speed)
 		hexapod_v3.update_engine_sound(self, signed_speed)
+		hexapod_v3.update_turn_sound(self, turning)
 	end,
 })
 

@@ -47,20 +47,22 @@ hexapod_v3.tail_count = 5
 hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
 
 -- Pattes (gauche/droite), une paire par segment "hanche" du train, en
--- partant de celui immediatement derriere la tete. Chaine : corps ->
--- connecteur -> femur -> connecteur -> tibia, suspendue verticalement
--- sous le point d'attache. Chaque piece est un node de la meme taille que
--- ceux du corps (`hexapod_v3.tail_size`).
+-- partant de celui immediatement derriere la tete. Chaine "en L" : corps ->
+-- hanche -> femur (horizontal, s'eloigne du corps) -> genou -> tibia
+-- (vertical, descend jusqu'au sol). Chaque piece est un node de la meme
+-- taille que ceux du corps (`hexapod_v3.tail_size`).
 hexapod_v3.leg_pair_count = 3       -- un hexapod a 6 pattes, donc 3 paires
 hexapod_v3.leg_pair_spacing = 2     -- ecart (en segments du train) entre deux hanches -> 1 segment vide entre deux paires de pattes
-hexapod_v3.leg_segment_height = 2  -- hauteur du femur et du tibia, en nombre de noeuds
+hexapod_v3.leg_segment_height = 2  -- nombre de noeuds du femur (horizontal) et du tibia (vertical)
 
 -- Distance verticale entre le centre du corps et le point le plus bas des
--- pattes (2 jointures + les nodes de femur/tibia, cf. `hexapod_v3.spawn_leg`) :
--- utilisee pour poser le hexapod assez haut pour que ses pattes ne
+-- pattes, utilisee pour poser le hexapod assez haut pour que ses pattes ne
 -- s'enfoncent pas dans le sol (voir le `on_place` de l'item plus bas).
-hexapod_v3.leg_chain_length = 2 + 2 * hexapod_v3.leg_segment_height  -- nombre de nodes dans une patte
-hexapod_v3.leg_drop = (hexapod_v3.leg_chain_length - 1) * hexapod_v3.tail_size + hexapod_v3.tail_size / 2
+-- Avec la chaine "en L" (cf. `hexapod_v3.spawn_leg`), seuls la hanche (1
+-- cran) et le tibia (`leg_segment_height` crans) contribuent a la chute
+-- verticale -- le femur, horizontal, ne descend pas -- plus une demi-taille
+-- de node pour atteindre la face basse du dernier node de tibia.
+hexapod_v3.leg_drop = hexapod_v3.tail_size * (1.5 + hexapod_v3.leg_segment_height)
 
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
@@ -153,35 +155,47 @@ function hexapod_v3.spawn_leg_part(entity_name, parent_object, parent_pos, offse
 	return part
 end
 
--- Construit une patte complete (hanche -> femur -> genou -> tibia)
--- suspendue sous le flanc (`side` = 1 pour droite, -1 pour gauche) du
--- segment "hanche" qui sert de parent a toutes les pieces. Chaque piece
--- est un node de la meme taille que le corps (`hexapod_v3.tail_size`),
--- colle directement sous le precedent (centres espaces d'exactement
--- `tail_size`). Les deux nodes de jointure -- la **hanche** (corps<->femur)
--- et le **genou** (femur<->tibia) -- utilisent une entite/texture
--- distincte (`hexapod_v3:leg_joint`) de celle des segments de femur/tibia
--- (`hexapod_v3:leg_part`, texture du corps).
+-- Construit une patte complete "en L" (hanche -> femur horizontal -> genou
+-- -> tibia vertical), suspendue sous le flanc (`side` = 1 pour droite, -1
+-- pour gauche) du segment "hanche" qui sert de parent a toutes les pieces.
+-- Chaque piece est un node de la meme taille que le corps
+-- (`hexapod_v3.tail_size`). Les deux nodes de jointure -- la **hanche**
+-- (corps<->femur) et le **genou** (femur<->tibia) -- utilisent une
+-- entite/texture distincte (`hexapod_v3:leg_joint`) de celle des segments
+-- de femur/tibia (`hexapod_v3:leg_part`, texture du corps).
+--
+-- Forme de la patte (side = 1, vue de profil, x vers la droite = s'eloigne
+-- du corps, y vers le bas) :
+--   y=0   [Hanche]
+--   y=-s        [Femur]...[Femur][Genou]
+--   y=-2s..                            [Tibia]...[Tibia]
+-- Le femur est donc horizontal (seul `x` avance, `y` fixe a -s, un cran
+-- sous la hanche), et le genou se trouve a son extremite, a la meme
+-- hauteur. Le tibia repart de la, purement vertical (`x` fixe, `y`
+-- continue de descendre).
 function hexapod_v3.spawn_leg(self, hip_object, side)
 	local s = hexapod_v3.tail_size
-	local x = side * s  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
 	local hip_pos = hip_object:get_pos()
 
-	-- Ordre de la chaine : hanche, N nodes de femur, genou,
-	-- N nodes de tibia (N = hexapod_v3.leg_segment_height).
-	local chain = {
-		{ entity = "hexapod_v3:leg_joint", count = 1 },  -- hanche (corps <-> femur)
-		{ entity = "hexapod_v3:leg_part", count = hexapod_v3.leg_segment_height },
-		{ entity = "hexapod_v3:leg_joint", count = 1 },  -- genou (femur <-> tibia)
-		{ entity = "hexapod_v3:leg_part", count = hexapod_v3.leg_segment_height },
-	}
-	local y = 0
-	for _, link in ipairs(chain) do
-		for _ = 1, link.count do
-			local part = hexapod_v3.spawn_leg_part(link.entity, hip_object, hip_pos, { x = x, y = y, z = 0 })
-			table.insert(self.leg_parts, part)
-			y = y - s
-		end
+	local x = side * s  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
+	local hanche = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = 0, z = 0 })
+	table.insert(self.leg_parts, hanche)
+
+	local y = -s
+	for _ = 1, hexapod_v3.leg_segment_height do
+		x = x + side * s
+		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = 0 })
+		table.insert(self.leg_parts, part)
+	end
+
+	x = x + side * s
+	local genou = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = 0 })
+	table.insert(self.leg_parts, genou)
+
+	for _ = 1, hexapod_v3.leg_segment_height do
+		y = y - s
+		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = 0 })
+		table.insert(self.leg_parts, part)
 	end
 end
 

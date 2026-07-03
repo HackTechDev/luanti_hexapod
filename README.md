@@ -79,34 +79,39 @@ en partant de celui immediatement derriere la tete
 defaut, un segment du train reste donc libre entre deux paires de pattes
 plutot que d'etre colle a la precedente. Chaque patte est une chaine de
 6 nodes, **tous de la meme taille que les nodes du corps**
-(`hexapod_v3.tail_size`), suspendue verticalement sous son flanc
-d'attache :
+(`hexapod_v3.tail_size`), en forme de **L** sous son flanc d'attache :
 
 ```
-Corps -> Hanche -> Femur (2 noeuds) -> Genou -> Tibia (2 noeuds)
+Corps -> Hanche -> Femur (2 noeuds, horizontal) -> Genou -> Tibia (2 noeuds, vertical)
 ```
 
-Les deux nodes de liaison portent donc chacun un nom anatomique : la
-**hanche** relie le corps au femur, et le **genou** relie le femur au
-tibia. Tous deux utilisent l'entite `hexapod_v3:leg_joint` avec une
-texture distincte (`hexapod_v3_joint.png`, gris avec un rivet central)
-pour bien marquer les articulations, alors que le femur et le tibia
-reprennent la texture du corps (`hexapod_v3:leg_part`).
+La **hanche** reste collee au flanc du corps ; le **femur** part de la a
+l'horizontale (il s'eloigne du corps sur le cote, sans descendre) ; le
+**genou** se trouve a son extremite, a la meme hauteur que lui ; le
+**tibia** repart alors du genou a la verticale, en descendant jusqu'au
+sol. Les deux nodes de liaison portent donc chacun un nom anatomique :
+la hanche relie le corps au femur, et le genou relie le femur au tibia.
+Tous deux utilisent l'entite `hexapod_v3:leg_joint` avec une texture
+distincte (`hexapod_v3_joint.png`, gris avec un rivet central) pour bien
+marquer les articulations, alors que le femur et le tibia reprennent la
+texture du corps (`hexapod_v3:leg_part`).
 
 Comme le train, c'est purement statique : chaque node est attache une
 fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
 "hanche" qui lui correspond (`hexapod_v3.spawn_legs` parcourt les
 segments du train espaces de `leg_pair_spacing`), avec un decalage
-vertical qui augmente d'exactement `hexapod_v3.tail_size` a chaque node
-de la chaine pour qu'ils restent colles les uns sous les autres
-(`hexapod_v3.spawn_leg`).
-Le nombre de nodes du femur et du tibia se regle via
+calcule piece par piece (`hexapod_v3.spawn_leg`) : lateral (`x`) pour le
+femur, vertical (`y`) pour le tibia, chaque pas valant exactement
+`hexapod_v3.tail_size` pour que les nodes restent colles les uns aux
+autres. Le nombre de nodes du femur et du tibia se regle via
 `hexapod_v3.leg_segment_height` (2 par defaut).
 
-**Hauteur de pose.** Les pattes pendent sous le corps sur
-`hexapod_v3.leg_drop` noeuds (calcule automatiquement a partir de
-`leg_segment_height` et `tail_size`). Le `on_place` de l'item en tient
-compte pour poser le hexapod plus haut que son seul corps ne le
+**Hauteur de pose.** Seuls la hanche (un cran) et le tibia
+(`hexapod_v3.leg_segment_height` crans) contribuent a la chute verticale
+des pattes sous le corps -- le femur, horizontal, n'y ajoute rien -- pour
+un total de `hexapod_v3.leg_drop` noeuds (calcule automatiquement a
+partir de `leg_segment_height` et `tail_size`). Le `on_place` de l'item
+en tient compte pour poser le hexapod plus haut que son seul corps ne le
 demanderait, afin que les pattes ne s'enfoncent pas dans le sol au lieu
 de rester visibles au-dessus.
 

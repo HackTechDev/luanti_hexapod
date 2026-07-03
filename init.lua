@@ -102,7 +102,8 @@ function hexapod_v3.update_camera(self, player)
 	self.camera_rig:move_to(target, true)
 end
 
--- Attache une roue au flanc (droit ou gauche) du hexapod.
+-- Attache une roue au flanc (droit ou gauche) du hexapod : `side` = 1 pour
+-- la roue droite, -1 pour la roue gauche.
 --
 -- Contrairement a la camera (qui doit suivre un joueur avec un regard
 -- libre, donc etre positionnee independamment), les roues doivent rester
@@ -121,11 +122,12 @@ function hexapod_v3.attach_wheel(wheel, pod_object, side)
 		{ x = 0, y = 0, z = 0 })
 end
 
--- Cree et attache, a la queue leu leu derriere le hexapod, une rangee de
--- `hexapod_v3.tail_count` segments (le premier colle a la face arriere -Z,
--- puis un par un le long de -Z). Purement decoratif et statique : un seul
--- `set_attach` par segment suffit, pas besoin de le rappeler a chaque pas
--- (contrairement aux roues, ces segments ne tournent pas sur eux-memes).
+-- Cree et attache, a la queue leu leu derriere le hexapod, le "train
+-- arriere" : une rangee de `hexapod_v3.tail_count` segments (le premier
+-- colle a la face arriere -Z, puis un par un le long de -Z). Purement
+-- decoratif et statique : un seul `set_attach` par segment suffit, pas
+-- besoin de le rappeler a chaque pas (contrairement aux roues, ces
+-- segments ne tournent pas sur eux-memes).
 function hexapod_v3.spawn_tail(self)
 	self.tail_segments = {}
 	local pod_object = self.object
@@ -313,8 +315,8 @@ minetest.register_entity("hexapod_v3:camera_rig", {
 	},
 })
 
--- Roue decorative attachee de part et d'autre du hexapod (voir
--- `hexapod_v3.update_wheels`).
+-- Roue decorative attachee de part et d'autre du hexapod : roue droite ou
+-- roue gauche selon le cote (voir `hexapod_v3.update_wheels`).
 minetest.register_entity("hexapod_v3:wheel", {
 	initial_properties = {
 		visual = "cube",
@@ -332,8 +334,9 @@ minetest.register_entity("hexapod_v3:wheel", {
 	},
 })
 
--- Segment decoratif statique du "train" attache derriere le hexapod (voir
--- `hexapod_v3.spawn_tail`). Memes textures que le corps du hexapod.
+-- Segment decoratif statique du "train arriere" attache derriere le
+-- hexapod (voir `hexapod_v3.spawn_tail`). Memes textures que le corps du
+-- hexapod.
 minetest.register_entity("hexapod_v3:tail_segment", {
 	initial_properties = {
 		visual = "cube",
@@ -412,12 +415,12 @@ minetest.register_entity("hexapod_v3:pod", {
 
 	driver = nil,
 	camera_rig = nil,
-	wheel_right = nil,
-	wheel_left = nil,
+	wheel_right = nil,  -- roue droite
+	wheel_left = nil,   -- roue gauche
 	wheel_spin_deg = 0,
 	engine_sound_handle = nil,
 	turn_sound_handle = nil,
-	tail_segments = nil,
+	tail_segments = nil,  -- segments du "train arriere"
 	leg_parts = nil,
 
 	on_activate = function(self)
@@ -425,12 +428,12 @@ minetest.register_entity("hexapod_v3:pod", {
 		hexapod_v3.pods[self] = true
 
 		local pos = self.object:get_pos()
-		self.wheel_right = minetest.add_entity(pos, "hexapod_v3:wheel")
-		self.wheel_left = minetest.add_entity(pos, "hexapod_v3:wheel")
+		self.wheel_right = minetest.add_entity(pos, "hexapod_v3:wheel")  -- roue droite
+		self.wheel_left = minetest.add_entity(pos, "hexapod_v3:wheel")   -- roue gauche
 		hexapod_v3.attach_wheel(self.wheel_right, self.object, 1)
 		hexapod_v3.attach_wheel(self.wheel_left, self.object, -1)
 
-		hexapod_v3.spawn_tail(self)
+		hexapod_v3.spawn_tail(self)  -- train arriere
 		hexapod_v3.spawn_legs(self)
 	end,
 

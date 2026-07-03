@@ -35,8 +35,9 @@ hexapod est oriente.
 
 ### Roues
 
-Deux petites entites ("roues", `hexapod_v3:wheel`) sont **attachees**
-(`set_attach`) de part et d'autre du hexapod, ce qui les colle rigidement
+Deux petites entites (`hexapod_v3:wheel`) sont **attachees** (`set_attach`)
+de part et d'autre du hexapod : la **roue droite** (`self.wheel_right`) et
+la **roue gauche** (`self.wheel_left`). L'attachement les colle rigidement
 a son corps (position et cap) sans le moindre decalage, meme en mouvement.
 Elles tournent sur elles-memes proportionnellement a sa vitesse : vers
 l'avant quand il avance, vers l'arriere quand il recule, immobiles a
@@ -60,13 +61,13 @@ rotation mise a jour (position laterale inchangee).
 ### Train arriere
 
 Une rangee de `hexapod_v3.tail_count` nodes decoratifs (`hexapod_v3:tail_segment`,
-memes textures que le corps) est **attachee** a la queue leu leu derriere
-le hexapod (le long de l'axe -Z, colle a la face arriere), un peu comme un
-petit train. Purement statique : un seul `set_attach` par segment a la
-creation suffit, ces segments ne tournant pas sur eux-memes (contrairement
-aux roues) -- ils suivent la position et le cap du hexapod sans latence
-grace a l'attachement, comme les roues. Reglable via `hexapod_v3.tail_count`
-et `hexapod_v3.tail_size`.
+memes textures que le corps) forme le **train arriere** (`self.tail_segments`),
+**attachee** a la queue leu leu derriere le hexapod (le long de l'axe -Z,
+colle a la face arriere), un peu comme un petit train. Purement statique :
+un seul `set_attach` par segment a la creation suffit, ces segments ne
+tournant pas sur eux-memes (contrairement aux roues) -- ils suivent la
+position et le cap du hexapod sans latence grace a l'attachement, comme
+les roues. Reglable via `hexapod_v3.tail_count` et `hexapod_v3.tail_size`.
 
 ### Pattes
 

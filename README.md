@@ -82,13 +82,15 @@ plutot que d'etre colle a la precedente. Chaque patte est une chaine de
 d'attache :
 
 ```
-Corps -> Node de liaison -> Femur (2 noeuds) -> Node de liaison -> Tibia (2 noeuds)
+Corps -> Hanche -> Femur (2 noeuds) -> Genou -> Tibia (2 noeuds)
 ```
 
-Les deux nodes de liaison (corps<->femur et femur<->tibia) utilisent une
-texture distincte (`hexapod_v3:leg_joint`, `hexapod_v3_joint.png`, gris
-avec un rivet central) pour bien marquer les articulations, alors que le
-femur et le tibia reprennent la texture du corps (`hexapod_v3:leg_part`).
+Les deux nodes de liaison portent donc chacun un nom anatomique : la
+**hanche** relie le corps au femur, et le **genou** relie le femur au
+tibia. Tous deux utilisent l'entite `hexapod_v3:leg_joint` avec une
+texture distincte (`hexapod_v3_joint.png`, gris avec un rivet central)
+pour bien marquer les articulations, alors que le femur et le tibia
+reprennent la texture du corps (`hexapod_v3:leg_part`).
 
 Comme le train, c'est purement statique : chaque node est attache une
 fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node

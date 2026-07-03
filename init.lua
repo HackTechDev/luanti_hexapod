@@ -151,26 +151,26 @@ function hexapod_v3.spawn_leg_part(entity_name, parent_object, parent_pos, offse
 	return part
 end
 
--- Construit une patte complete (connecteur -> femur -> connecteur -> tibia)
+-- Construit une patte complete (hanche -> femur -> genou -> tibia)
 -- suspendue sous le flanc (`side` = 1 pour droite, -1 pour gauche) du
 -- segment "hanche" qui sert de parent a toutes les pieces. Chaque piece
 -- est un node de la meme taille que le corps (`hexapod_v3.tail_size`),
 -- colle directement sous le precedent (centres espaces d'exactement
--- `tail_size`). Les deux nodes de jointure (corps<->femur et
--- femur<->tibia) utilisent une entite/texture distincte
--- (`hexapod_v3:leg_joint`) de celle des segments de femur/tibia
+-- `tail_size`). Les deux nodes de jointure -- la **hanche** (corps<->femur)
+-- et le **genou** (femur<->tibia) -- utilisent une entite/texture
+-- distincte (`hexapod_v3:leg_joint`) de celle des segments de femur/tibia
 -- (`hexapod_v3:leg_part`, texture du corps).
 function hexapod_v3.spawn_leg(self, hip_object, side)
 	local s = hexapod_v3.tail_size
 	local x = side * s  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
 	local hip_pos = hip_object:get_pos()
 
-	-- Ordre de la chaine : jointure, N nodes de femur, jointure,
+	-- Ordre de la chaine : hanche, N nodes de femur, genou,
 	-- N nodes de tibia (N = hexapod_v3.leg_segment_height).
 	local chain = {
-		{ entity = "hexapod_v3:leg_joint", count = 1 },
+		{ entity = "hexapod_v3:leg_joint", count = 1 },  -- hanche (corps <-> femur)
 		{ entity = "hexapod_v3:leg_part", count = hexapod_v3.leg_segment_height },
-		{ entity = "hexapod_v3:leg_joint", count = 1 },
+		{ entity = "hexapod_v3:leg_joint", count = 1 },  -- genou (femur <-> tibia)
 		{ entity = "hexapod_v3:leg_part", count = hexapod_v3.leg_segment_height },
 	}
 	local y = 0

@@ -73,11 +73,11 @@ les roues. Reglable via `hexapod_v3.tail_count` et `hexapod_v3.tail_size`.
 
 `hexapod_v3.leg_pair_count` paires de pattes symetriques (gauche/droite,
 3 par defaut -- un hexapod ayant 6 pattes) sont **attachees**, une paire
-tous les `hexapod_v3.leg_pair_spacing` segments du train (2 par defaut),
+tous les `hexapod_v3.leg_pair_spacing` segments du train (3 par defaut),
 en partant de celui immediatement derriere la tete
-(`hexapod_v3.tail_segments[1]`, `[3]`, `[5]`, ...) : avec ces valeurs par
-defaut, un segment du train reste donc libre entre deux paires de pattes
-plutot que d'etre colle a la precedente. Chaque patte est une chaine de
+(`hexapod_v3.tail_segments[1]`, `[4]`, `[7]`, ...) : avec ces valeurs par
+defaut, deux segments du train restent donc libres entre deux paires de
+pattes plutot que d'etre colles a la precedente. Chaque patte est une chaine de
 6 nodes, **tous de la meme taille que les nodes du corps**
 (`hexapod_v3.tail_size`), en forme de **L** sous son flanc d'attache :
 

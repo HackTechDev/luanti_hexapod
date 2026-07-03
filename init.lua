@@ -43,7 +43,7 @@ hexapod_v3.turn_sound_max_hear_distance = 16
 
 -- Petit "train" de nodes decoratifs attaches en ligne, a la queue leu leu,
 -- derriere le hexapod (memes textures que le corps).
-hexapod_v3.tail_count = 5
+hexapod_v3.tail_count = 7
 hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
 
 -- Pattes (gauche/droite), une paire par segment "hanche" du train, en
@@ -52,7 +52,7 @@ hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
 -- (vertical, descend jusqu'au sol). Chaque piece est un node de la meme
 -- taille que ceux du corps (`hexapod_v3.tail_size`).
 hexapod_v3.leg_pair_count = 3       -- un hexapod a 6 pattes, donc 3 paires
-hexapod_v3.leg_pair_spacing = 2     -- ecart (en segments du train) entre deux hanches -> 1 segment vide entre deux paires de pattes
+hexapod_v3.leg_pair_spacing = 3     -- ecart (en segments du train) entre deux hanches -> 2 segments vides entre deux paires de pattes
 hexapod_v3.leg_segment_height = 2  -- nombre de noeuds du femur (horizontal) et du tibia (vertical)
 
 -- Distance verticale entre le centre du corps et le point le plus bas des
@@ -215,9 +215,9 @@ end
 -- droite, symetriques), une paire tous les `hexapod_v3.leg_pair_spacing`
 -- segments du train, en partant de celui immediatement derriere la tete
 -- (hexapod_v3.tail_segments[1], [1 + spacing], [1 + 2*spacing], ...).
--- Avec les valeurs par defaut (spacing = 2), un segment du train reste
--- donc libre entre deux paires de pattes plutot que d'etre colle a la
--- precedente.
+-- Avec les valeurs par defaut (spacing = 3), deux segments du train
+-- restent donc libres entre deux paires de pattes plutot que d'etre
+-- colles a la precedente.
 function hexapod_v3.spawn_legs(self)
 	self.leg_parts = {}
 	for i = 1, hexapod_v3.leg_pair_count do

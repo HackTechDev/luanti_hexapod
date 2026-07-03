@@ -77,13 +77,17 @@ tous les `hexapod_v3.leg_pair_spacing` segments du train (3 par defaut),
 en partant de celui immediatement derriere la tete
 (`hexapod_v3.tail_segments[1]`, `[4]`, `[7]`, ...) : avec ces valeurs par
 defaut, deux segments du train restent donc libres entre deux paires de
-pattes plutot que d'etre colles a la precedente. Chaque patte est une chaine de
-6 nodes, **tous de la meme taille que les nodes du corps**
-(`hexapod_v3.tail_size`), en forme de **L** sous son flanc d'attache :
+pattes plutot que d'etre colles a la precedente. Chaque patte est une
+chaine de 7 nodes (1 hanche + 2 femur + 1 genou + 3 tibia par defaut),
+**tous de la meme taille que les nodes du corps** (`hexapod_v3.tail_size`),
+en forme de **L** sous son flanc d'attache, le tibia repartant ensuite
+vers l'avant :
 
 ```
-[Hanche]
-[Femur][Femur][Genou]
+Vue de profil (x/y) :          Vue de dessus (x/z) :
+[Hanche]                       [Hanche][Femur][Femur][Genou]
+[Femur][Femur][Genou]                                [Tibia]
+              [Tibia]
               [Tibia]
               [Tibia]
 ```
@@ -92,10 +96,12 @@ La **hanche** reste collee au flanc du corps. Le premier node du
 **femur** est colle directement sous la hanche (meme colonne, un cran
 plus bas), puis le femur continue a l'horizontale (il s'eloigne du corps
 sur le cote, a hauteur constante) jusqu'au **genou**, a son extremite. Le
-**tibia** repart alors du genou a la verticale, sous lui, en descendant
-jusqu'au sol. Chaque transition ne change qu'un seul axe a la fois
-(jamais `x` et `y` en meme temps), pour que les nodes restent toujours
-colles face contre face -- un decalage simultane en diagonale laisserait
+premier node du **tibia** est alors colle sur la face **avant** du genou
+(`+Z`, la direction du regard du hexapod -- meme hauteur, meme cote), et
+les nodes de tibia suivants repartent de la a la verticale, en
+descendant jusqu'au sol. Chaque transition ne change qu'un seul axe a la
+fois (jamais deux en meme temps), pour que les nodes restent toujours
+colles face contre face -- un decalage simultane sur deux axes laisserait
 un vide de la taille d'un node entre deux nodes, qui ne se toucheraient
 plus que par une arete. Les deux nodes de liaison portent donc chacun un
 nom anatomique : la hanche relie le corps au femur, et le genou relie le
@@ -110,19 +116,23 @@ fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
 segments du train espaces de `leg_pair_spacing`), avec un decalage
 calcule piece par piece (`hexapod_v3.spawn_leg`) : vertical (`y`) pour
 descendre de la hanche au premier node de femur puis pour le tibia sous
-le genou, lateral (`x`) pour le reste du femur, chaque pas valant
-exactement `hexapod_v3.tail_size` pour que les nodes restent colles les
-uns aux autres. Le nombre de nodes du femur et du tibia se regle via
-`hexapod_v3.leg_segment_height` (2 par defaut).
+le genou, lateral (`x`) pour le reste du femur, avant (`z`) pour le
+premier node de tibia, chaque pas valant exactement
+`hexapod_v3.tail_size` pour que les nodes restent colles les uns aux
+autres. Le nombre de nodes du femur et du tibia se regle
+independamment via `hexapod_v3.leg_femur_height` (2 par defaut) et
+`hexapod_v3.leg_tibia_height` (3 par defaut).
 
-**Hauteur de pose.** Le premier node de femur (1 cran) puis le tibia
-(`hexapod_v3.leg_segment_height` crans) contribuent a la chute verticale
-des pattes sous le corps -- le reste du femur, horizontal, n'y ajoute
-rien -- pour un total de `hexapod_v3.leg_drop` noeuds (calcule
-automatiquement a partir de `leg_segment_height` et `tail_size`). Le
-`on_place` de l'item en tient compte pour poser le hexapod plus haut que
-son seul corps ne le demanderait, afin que les pattes ne s'enfoncent pas
-dans le sol au lieu de rester visibles au-dessus.
+**Hauteur de pose.** Le premier node de femur (1 cran) puis les
+`hexapod_v3.leg_tibia_height - 1` nodes de tibia qui descendent (le
+premier node de tibia, colle sur la face avant du genou, ne descend pas)
+contribuent a la chute verticale des pattes sous le corps -- le reste du
+femur, horizontal, n'y ajoute rien -- pour un total de
+`hexapod_v3.leg_drop` noeuds (calcule automatiquement a partir de
+`leg_tibia_height` et `tail_size`). Le `on_place` de l'item en tient
+compte pour poser le hexapod plus haut que son seul corps ne le
+demanderait, afin que les pattes ne s'enfoncent pas dans le sol au lieu
+de rester visibles au-dessus.
 
 ### Sons
 

@@ -53,17 +53,19 @@ hexapod_v3.tail_size = 1  -- taille visuelle de chaque segment, en noeuds
 -- taille que ceux du corps (`hexapod_v3.tail_size`).
 hexapod_v3.leg_pair_count = 3       -- un hexapod a 6 pattes, donc 3 paires
 hexapod_v3.leg_pair_spacing = 3     -- ecart (en segments du train) entre deux hanches -> 2 segments vides entre deux paires de pattes
-hexapod_v3.leg_segment_height = 2  -- nombre de noeuds du femur (horizontal) et du tibia (vertical)
+hexapod_v3.leg_femur_height = 2     -- nombre de noeuds du femur (horizontal)
+hexapod_v3.leg_tibia_height = 3     -- nombre de noeuds du tibia (vertical, colle sur la face avant du genou)
 
 -- Distance verticale entre le centre du corps et le point le plus bas des
 -- pattes, utilisee pour poser le hexapod assez haut pour que ses pattes ne
 -- s'enfoncent pas dans le sol (voir le `on_place` de l'item plus bas).
 -- Avec la chaine "en L" (cf. `hexapod_v3.spawn_leg`), le premier node du
--- femur est colle directement sous la hanche (1 cran), puis le tibia
--- descend de `leg_segment_height` crans supplementaires sous le genou,
--- plus une demi-taille de node pour atteindre la face basse du dernier
--- node de tibia.
-hexapod_v3.leg_drop = hexapod_v3.tail_size * (1.5 + hexapod_v3.leg_segment_height)
+-- femur est colle directement sous la hanche (1 cran) ; le premier node de
+-- tibia est sur la face avant du genou, a la meme hauteur que lui (0 cran
+-- vertical) ; seuls les `leg_tibia_height - 1` nodes de tibia suivants
+-- descendent, plus une demi-taille de node pour atteindre la face basse du
+-- dernier node de tibia.
+hexapod_v3.leg_drop = hexapod_v3.tail_size * (hexapod_v3.leg_tibia_height + 0.5)
 
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
@@ -165,48 +167,57 @@ end
 -- entite/texture distincte (`hexapod_v3:leg_joint`) de celle des segments
 -- de femur/tibia (`hexapod_v3:leg_part`, texture du corps).
 --
--- Forme de la patte (side = 1, vue de profil, x vers la droite = s'eloigne
--- du corps, y vers le bas) :
+-- Forme de la patte (side = 1, vue de profil x/y, x vers la droite =
+-- s'eloigne du corps, y vers le bas) :
 --   y=0    [Hanche]
 --   y=-s   [Femur][Femur]...[Genou]
---   y=-2s..                      [Tibia]
+--   y=-2s..                      [Tibia]  <- vu de face (z), decale vers l'avant
 --   ...                          [Tibia]
 -- Le premier node du femur est colle directement sous la hanche (meme
 -- `x`, un cran plus bas) ; le femur continue ensuite a l'horizontale
--- (`x` avance, `y` fixe) jusqu'au genou. Le tibia repart de la a la
--- verticale, sous le genou (`x` fixe, `y` descend). Chaque transition ne
--- change qu'un seul axe a la fois, pour que les nodes restent colles face
--- contre face (un decalage simultane en `x` et en `y` laisserait un vide
--- de la taille d'un node entre deux nodes, qui ne se toucheraient plus
--- que par une arete).
+-- (`x` avance, `y` fixe) jusqu'au genou. Le premier node de tibia est
+-- colle sur la face AVANT du genou (`z` avance d'un cran vers +Z, la
+-- direction du regard du hexapod -- meme `x`, meme `y`) ; les nodes de
+-- tibia suivants repartent de la a la verticale (`z` fixe, `y` descend).
+-- Chaque transition ne change qu'un seul axe a la fois, pour que les
+-- nodes restent colles face contre face (un decalage simultane sur deux
+-- axes laisserait un vide de la taille d'un node entre deux nodes, qui ne
+-- se toucheraient plus que par une arete).
 function hexapod_v3.spawn_leg(self, hip_object, side)
 	local s = hexapod_v3.tail_size
 	local hip_pos = hip_object:get_pos()
 
 	local x = side * s  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
 	local y = 0
-	local hanche = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = 0 })
+	local z = 0
+	local hanche = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = z })
 	table.insert(self.leg_parts, hanche)
 
 	-- Premier node de femur : colle directement sous la hanche (meme x).
 	y = y - s
-	local first_femur = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = 0 })
+	local first_femur = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
 	table.insert(self.leg_parts, first_femur)
 
 	-- Nodes de femur suivants : a l'horizontale, a la meme hauteur.
-	for _ = 2, hexapod_v3.leg_segment_height do
+	for _ = 2, hexapod_v3.leg_femur_height do
 		x = x + side * s
-		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = 0 })
+		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
 		table.insert(self.leg_parts, part)
 	end
 
 	x = x + side * s
-	local genou = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = 0 })
+	local genou = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = z })
 	table.insert(self.leg_parts, genou)
 
-	for _ = 1, hexapod_v3.leg_segment_height do
+	-- Premier node de tibia : colle sur la face avant du genou (meme x, y).
+	z = z + s
+	local first_tibia = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
+	table.insert(self.leg_parts, first_tibia)
+
+	-- Nodes de tibia suivants : a la verticale, sous le premier.
+	for _ = 2, hexapod_v3.leg_tibia_height do
 		y = y - s
-		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = 0 })
+		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
 		table.insert(self.leg_parts, part)
 	end
 end

@@ -110,17 +110,20 @@ une texture distincte (`hexapod_v3_joint.png`, gris avec un rivet
 central) pour bien marquer les articulations, alors que le femur et le
 tibia reprennent la texture du corps (`hexapod_v3:leg_part`).
 
-Comme le train, c'est purement statique : chaque node est attache une
-fois pour toutes (`hexapod_v3.spawn_leg_part`) directement au node
-"hanche" qui lui correspond (`hexapod_v3.spawn_legs` parcourt les
-segments du train espaces de `leg_pair_spacing`), avec un decalage
-calcule piece par piece (`hexapod_v3.spawn_leg`) : vertical (`y`) pour
-descendre de la hanche au premier node de femur puis pour le tibia sous
-le genou, lateral (`x`) pour le reste du femur, avant (`z`) pour le
-premier node de tibia, chaque pas valant exactement
+Contrairement au train, chaque piece de patte n'est pas attachee
+directement au node "hanche" du train, mais **a la piece precedente**
+(`hexapod_v3.spawn_leg`) : la hanche au node du train, le premier femur a
+la hanche, le femur suivant au premier, le genou au dernier femur, le
+premier tibia au genou, le tibia suivant au premier, etc. Cette vraie
+chaine articulee est ce qui permet la demarche animee (voir plus bas) :
+faire pivoter un maillon entraine avec lui tout ce qui lui est attache en
+aval. Chaque decalage (`hexapod_v3.spawn_leg_part`) vaut exactement
 `hexapod_v3.tail_size` pour que les nodes restent colles les uns aux
-autres. Le nombre de nodes du femur et du tibia se regle
-independamment via `hexapod_v3.leg_femur_height` (2 par defaut) et
+autres au repos : vertical (`y`) pour descendre de la hanche au premier
+node de femur puis pour le tibia sous le genou, lateral (`x`) pour le
+reste du femur, avant (`z`) pour le premier node de tibia. Le nombre de
+nodes du femur et du tibia se regle independamment via
+`hexapod_v3.leg_femur_height` (2 par defaut) et
 `hexapod_v3.leg_tibia_height` (3 par defaut).
 
 **Hauteur de pose.** Le premier node de femur (1 cran) puis les
@@ -133,6 +136,43 @@ femur, horizontal, n'y ajoute rien -- pour un total de
 compte pour poser le hexapod plus haut que son seul corps ne le
 demanderait, afin que les pattes ne s'enfoncent pas dans le sol au lieu
 de rester visibles au-dessus.
+
+### Demarche des pattes
+
+Tant que le hexapod se deplace ou pivote, ses 6 pattes marchent selon une
+**demarche tripode** (comme un vrai hexapode) : elles sont reparties en 2
+groupes de 3 (`hexapod_v3.spawn_legs`, motif
+avant-droite/milieu-gauche/arriere-droite contre
+avant-gauche/milieu-droite/arriere-gauche) qui alternent en opposition de
+phase -- quand l'un balance (patte levee, avance), l'autre est en appui
+(patte au sol, recule) --, exactement comme sur un vrai hexapode qui garde
+toujours au moins 3 pattes au sol.
+
+Chaque patte n'a que 2 degres de liberte, conformement a la contrainte
+demandee :
+
+- la **hanche** ne peut tourner qu'a l'**horizontale** (axe `Y`) : cette
+  rotation entraine tout le reste de la patte (femur + genou + tibia, qui
+  lui sont attaches en cascade) et fait donc balancer la patte entiere
+  vers l'avant ou l'arriere ;
+- le **genou** ne peut tourner qu'a la **verticale** (axe `X`) : cette
+  rotation n'entraine que le tibia, et sert a lever le pied pendant le
+  balancement (`max(0, sin(phase))`, donc uniquement sur la moitie
+  "avant" du cycle) puis a le reposer bien a plat pendant l'appui.
+
+Le femur et le tibia eux-memes ne tournent jamais : ce sont des maillons
+passifs qui suivent leur pivot (la hanche pour le femur, le genou pour le
+tibia). Comme pour les roues, la rotation d'un objet attache etant
+ignoree par `set_rotation()`, elle est reanimee a chaque pas en rappelant
+`set_attach` avec le meme decalage de position mais un nouvel angle
+(`hexapod_v3.update_legs`).
+
+Reglable via `hexapod_v3.leg_hip_swing_deg` (amplitude du balayage de la
+hanche, 25° par defaut), `hexapod_v3.leg_knee_lift_deg` (amplitude de la
+levee du genou, 35° par defaut) et `hexapod_v3.leg_gait_speed` (vitesse
+de la phase de marche, 1 cycle/seconde par defaut). La phase de marche
+n'avance que si le hexapod se deplace ou pivote effectivement ; a l'arret,
+les pattes se figent dans leur derniere position.
 
 ### Sons
 

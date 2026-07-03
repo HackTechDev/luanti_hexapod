@@ -56,6 +56,16 @@ hexapod_v3.leg_pair_spacing = 3     -- ecart (en segments du train) entre deux h
 hexapod_v3.leg_femur_height = 2     -- nombre de noeuds du femur (horizontal)
 hexapod_v3.leg_tibia_height = 3     -- nombre de noeuds du tibia (vertical, colle sur la face avant du genou)
 
+-- Demarche "tripode" (comme un vrai hexapode) : les 6 pattes sont reparties
+-- en 2 groupes de 3 qui alternent balancement (patte levee, avance) et appui
+-- (patte au sol, recule) -- voir `hexapod_v3.update_legs`. La hanche ne peut
+-- tourner qu'a l'horizontale (elle entraine tout le femur+tibia avec elle,
+-- balayage avant/arriere) ; le genou ne peut tourner qu'a la verticale (il
+-- n'entraine que le tibia, levee/pose du pied).
+hexapod_v3.leg_hip_swing_deg = 25    -- amplitude du balayage horizontal de la hanche
+hexapod_v3.leg_knee_lift_deg = 35    -- amplitude de la levee verticale du genou
+hexapod_v3.leg_gait_speed = math.pi * 2  -- vitesse de la phase de marche, en radians/seconde (1 cycle/s par defaut)
+
 -- Distance verticale entre le centre du corps et le point le plus bas des
 -- pattes, utilisee pour poser le hexapod assez haut pour que ses pattes ne
 -- s'enfoncent pas dans le sol (voir le `on_place` de l'item plus bas).
@@ -148,27 +158,27 @@ end
 
 -- Cree une piece de patte (`entity_name` : segment ou jointure), attachee
 -- a `parent_object` avec un decalage local `offset` ({x,y,z}, en noeuds).
--- Meme taille que les nodes du corps (`hexapod_v3.tail_size`). Statique
--- comme le train : un seul `set_attach` suffit.
-function hexapod_v3.spawn_leg_part(entity_name, parent_object, parent_pos, offset)
+-- Meme taille que les nodes du corps (`hexapod_v3.tail_size`).
+function hexapod_v3.spawn_leg_part(entity_name, parent_object, parent_pos, offset, rotation)
 	local part = minetest.add_entity(parent_pos, entity_name)
 	part:set_attach(parent_object, "",
 		{ x = offset.x * 10, y = offset.y * 10, z = offset.z * 10 },
-		{ x = 0, y = 0, z = 0 })
+		rotation or { x = 0, y = 0, z = 0 })
 	return part
 end
 
 -- Construit une patte complete "en L" (hanche -> femur horizontal -> genou
 -- -> tibia vertical), suspendue sous le flanc (`side` = 1 pour droite, -1
--- pour gauche) du segment "hanche" qui sert de parent a toutes les pieces.
+-- pour gauche) du segment "hanche" qui sert de parent a la patte, et
+-- assignee au groupe de demarche `group` (1 ou 2, cf. `hexapod_v3.update_legs`).
 -- Chaque piece est un node de la meme taille que le corps
 -- (`hexapod_v3.tail_size`). Les deux nodes de jointure -- la **hanche**
 -- (corps<->femur) et le **genou** (femur<->tibia) -- utilisent une
 -- entite/texture distincte (`hexapod_v3:leg_joint`) de celle des segments
 -- de femur/tibia (`hexapod_v3:leg_part`, texture du corps).
 --
--- Forme de la patte (side = 1, vue de profil x/y, x vers la droite =
--- s'eloigne du corps, y vers le bas) :
+-- Forme de la patte au repos (side = 1, vue de profil x/y, x vers la
+-- droite = s'eloigne du corps, y vers le bas) :
 --   y=0    [Hanche]
 --   y=-s   [Femur][Femur]...[Genou]
 --   y=-2s..                      [Tibia]  <- vu de face (z), decale vers l'avant
@@ -183,43 +193,63 @@ end
 -- nodes restent colles face contre face (un decalage simultane sur deux
 -- axes laisserait un vide de la taille d'un node entre deux nodes, qui ne
 -- se toucheraient plus que par une arete).
-function hexapod_v3.spawn_leg(self, hip_object, side)
+--
+-- Contrairement au train, chaque piece est desormais attachee a la
+-- PRECEDENTE (et non plus toutes directement a la hanche du train) : une
+-- vraie chaine articulee, ou faire pivoter un parent entraine tout ce qui
+-- lui est attache en dessous. La hanche et le genou servent de pivots
+-- (leur `rotation` est reanimee a chaque pas par `hexapod_v3.update_legs`,
+-- comme les roues) : faire tourner la hanche (axe Y, horizontal) balaie
+-- tout le femur+genou+tibia d'un bloc ; faire tourner le genou (axe X,
+-- vertical) ne balaie que le tibia. Femur et tibia eux-memes ne tournent
+-- jamais (rotation toujours nulle), ils suivent passivement leur pivot.
+function hexapod_v3.spawn_leg(self, hip_object, side, group)
 	local s = hexapod_v3.tail_size
 	local hip_pos = hip_object:get_pos()
 
-	local x = side * s  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
-	local y = 0
-	local z = 0
-	local hanche = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = z })
+	local hanche_offset = { x = side * s, y = 0, z = 0 }  -- s/2 (flanc de la hanche) + s/2 (flanc de la piece)
+	local hanche = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, hanche_offset)
 	table.insert(self.leg_parts, hanche)
 
-	-- Premier node de femur : colle directement sous la hanche (meme x).
-	y = y - s
-	local first_femur = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
+	-- Premier node de femur : colle directement sous la hanche (meme x,
+	-- dans le repere local de la hanche).
+	local first_femur = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hanche, hip_pos, { x = 0, y = -s, z = 0 })
 	table.insert(self.leg_parts, first_femur)
 
-	-- Nodes de femur suivants : a l'horizontale, a la meme hauteur.
+	-- Nodes de femur suivants : a l'horizontale, chaines les uns aux
+	-- autres, a la meme hauteur.
+	local femur_end = first_femur
 	for _ = 2, hexapod_v3.leg_femur_height do
-		x = x + side * s
-		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
-		table.insert(self.leg_parts, part)
+		femur_end = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", femur_end, hip_pos, { x = side * s, y = 0, z = 0 })
+		table.insert(self.leg_parts, femur_end)
 	end
 
-	x = x + side * s
-	local genou = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, { x = x, y = y, z = z })
+	local genou_offset = { x = side * s, y = 0, z = 0 }
+	local genou = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", femur_end, hip_pos, genou_offset)
 	table.insert(self.leg_parts, genou)
 
-	-- Premier node de tibia : colle sur la face avant du genou (meme x, y).
-	z = z + s
-	local first_tibia = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
+	-- Premier node de tibia : colle sur la face avant du genou (meme x, y,
+	-- dans le repere local du genou).
+	local first_tibia = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", genou, hip_pos, { x = 0, y = 0, z = s })
 	table.insert(self.leg_parts, first_tibia)
 
-	-- Nodes de tibia suivants : a la verticale, sous le premier.
+	-- Nodes de tibia suivants : a la verticale, chaines les uns aux
+	-- autres, sous le premier.
+	local tibia_end = first_tibia
 	for _ = 2, hexapod_v3.leg_tibia_height do
-		y = y - s
-		local part = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_object, hip_pos, { x = x, y = y, z = z })
-		table.insert(self.leg_parts, part)
+		tibia_end = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", tibia_end, hip_pos, { x = 0, y = -s, z = 0 })
+		table.insert(self.leg_parts, tibia_end)
 	end
+
+	table.insert(self.legs, {
+		hanche = hanche,
+		hanche_parent = hip_object,
+		hanche_offset = hanche_offset,
+		genou = genou,
+		genou_parent = femur_end,
+		genou_offset = genou_offset,
+		group = group,
+	})
 end
 
 -- Construit les `hexapod_v3.leg_pair_count` paires de pattes (gauche et
@@ -229,16 +259,24 @@ end
 -- Avec les valeurs par defaut (spacing = 3), deux segments du train
 -- restent donc libres entre deux paires de pattes plutot que d'etre
 -- colles a la precedente.
+--
+-- Chaque patte est assignee a l'un des deux groupes de la demarche
+-- tripode (cf. `hexapod_v3.update_legs`) en alternant paire par paire et
+-- cote par cote, de sorte que deux pattes voisines (meme paire, ou meme
+-- cote sur deux paires consecutives) ne soient jamais dans le meme
+-- groupe -- motif classique avant-droite/milieu-gauche/arriere-droite
+-- contre avant-gauche/milieu-droite/arriere-gauche.
 function hexapod_v3.spawn_legs(self)
 	self.leg_parts = {}
+	self.legs = {}
 	for i = 1, hexapod_v3.leg_pair_count do
 		local segment_index = 1 + (i - 1) * hexapod_v3.leg_pair_spacing
 		local hip_object = self.tail_segments[segment_index]
 		if not hip_object then
 			break
 		end
-		hexapod_v3.spawn_leg(self, hip_object, 1)   -- droite
-		hexapod_v3.spawn_leg(self, hip_object, -1)  -- gauche
+		hexapod_v3.spawn_leg(self, hip_object, 1, (i % 2 == 0) and 1 or 2)   -- droite
+		hexapod_v3.spawn_leg(self, hip_object, -1, (i % 2 == 0) and 2 or 1)  -- gauche
 	end
 end
 
@@ -264,6 +302,44 @@ function hexapod_v3.update_wheels(self, dtime, signed_speed)
 		{ x = hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
 	self.wheel_left:set_attach(self.object, "",
 		{ x = -hexapod_v3.wheel_offset * 10, y = 0, z = 0 }, rotation)
+end
+
+-- Anime la demarche "tripode" des pattes : les deux groupes (1 et 2, cf.
+-- `hexapod_v3.spawn_legs`) sont en opposition de phase (dephasage de pi),
+-- de sorte que lorsque l'un est en balancement (patte levee, avance),
+-- l'autre est en appui (patte au sol, recule), et inversement.
+--
+-- La hanche et le genou etant attaches (donc `set_rotation()` est ignore,
+-- comme pour les roues), on reanime leur rotation en rappelant
+-- `set_attach` a chaque pas avec le meme decalage de position mais une
+-- nouvelle rotation :
+-- - hanche : rotation.y (horizontale) = balayage avant/arriere de toute la
+--   patte (femur+genou+tibia, qui lui sont tous attaches en cascade) ;
+-- - genou : rotation.x (verticale) = levee/pose du tibia seul. La levee
+--   n'a lieu que sur la moitie "avant" du cycle (sin > 0, phase de
+--   balancement) ; le genou reste a plat (0) pendant la moitie "arriere"
+--   (phase d'appui), pour que la patte pousse au sol sans se relever.
+function hexapod_v3.update_legs(self, dtime, moving)
+	if not self.legs then
+		return
+	end
+
+	if moving then
+		self.leg_phase = (self.leg_phase + hexapod_v3.leg_gait_speed * dtime) % (2 * math.pi)
+	end
+
+	for _, leg in ipairs(self.legs) do
+		local phase = self.leg_phase + (leg.group == 1 and 0 or math.pi)
+		local hip_deg = hexapod_v3.leg_hip_swing_deg * math.sin(phase)
+		local knee_deg = hexapod_v3.leg_knee_lift_deg * math.max(0, math.sin(phase))
+
+		leg.hanche:set_attach(leg.hanche_parent, "",
+			{ x = leg.hanche_offset.x * 10, y = leg.hanche_offset.y * 10, z = leg.hanche_offset.z * 10 },
+			{ x = 0, y = hip_deg, z = 0 })
+		leg.genou:set_attach(leg.genou_parent, "",
+			{ x = leg.genou_offset.x * 10, y = leg.genou_offset.y * 10, z = leg.genou_offset.z * 10 },
+			{ x = knee_deg, y = 0, z = 0 })
+	end
 end
 
 -- Demarre/arrete un son en boucle attache au hexapod selon une condition
@@ -459,6 +535,8 @@ minetest.register_entity("hexapod_v3:pod", {
 	turn_sound_handle = nil,
 	tail_segments = nil,  -- segments du "train arriere"
 	leg_parts = nil,
+	legs = nil,        -- pivots (hanche/genou) de chaque patte, pour la demarche
+	leg_phase = 0,
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
@@ -506,6 +584,7 @@ minetest.register_entity("hexapod_v3:pod", {
 			end
 			self.leg_parts = nil
 		end
+		self.legs = nil
 		hexapod_v3.pods[self] = nil
 	end,
 
@@ -567,6 +646,7 @@ minetest.register_entity("hexapod_v3:pod", {
 		hexapod_v3.update_wheels(self, dtime, signed_speed)
 		hexapod_v3.update_engine_sound(self, signed_speed)
 		hexapod_v3.update_turn_sound(self, turning)
+		hexapod_v3.update_legs(self, dtime, signed_speed ~= 0 or turning)
 	end,
 })
 

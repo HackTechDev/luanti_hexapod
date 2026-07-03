@@ -33,6 +33,27 @@ texture distincte (`hexapod_v3_node_front.png`, fond orange avec un chevron)
 pour qu'on puisse voir d'un coup d'oeil, de l'exterieur, dans quel sens le
 hexapod est oriente.
 
+### Gravite
+
+Le hexapod subit une gravite constante (`hexapod_v3.gravity`, en
+noeuds/s², meme grandeur que la gravite par defaut de Minetest) et tombe
+donc normalement s'il se retrouve en l'air (bord d'une falaise, saut d'un
+bloc...) ; etant `physical = true`, le moteur arrete de lui-meme sa chute
+au contact du sol. Le pilotage (touches Haut/Bas, camera) ne controle que
+le deplacement horizontal : la composante verticale de la vitesse
+(chute) est toujours preservee telle quelle, y compris pendant qu'on le
+pilote ou juste apres avoir relache les commandes, pour qu'il continue
+de tomber normalement plutot que de rester fige en l'air.
+
+La boite de collision du hexapod (`collisionbox`) s'etend vers le bas
+jusqu'a la pointe des pattes (`hexapod_v3.leg_drop` sous le centre du
+corps), et non pas seulement autour du corps : sans ca, la chute
+s'arreterait des que le corps touche le sol, laissant les pattes
+s'enfoncer dedans. Note pour les tests : cette propriete n'est lue qu'a
+la creation d'un hexapod (`on_activate`) -- un hexapod deja pose avant
+une modification du mod garde son ancienne boite de collision tant qu'il
+n'est pas repose ou que le monde n'est pas recharge.
+
 ### Roues
 
 Deux petites entites (`hexapod_v3:wheel`) sont **attachees** (`set_attach`)

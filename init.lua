@@ -20,6 +20,12 @@ hexapod_v3 = {}
 hexapod_v3.forward_speed = 4          -- noeuds par seconde
 hexapod_v3.turn_speed = math.rad(90)  -- radians par seconde
 
+-- Gravite (noeuds/s^2, valeur habituelle de Minetest) appliquee en
+-- permanence au hexapod pour qu'il tombe s'il se retrouve en l'air
+-- (falaise, saut d'un bloc...). Le hexapod etant `physical = true`, le
+-- moteur arrete de lui-meme la chute au contact du sol.
+hexapod_v3.gravity = 9.81
+
 -- Distance a laquelle la camera est maintenue derriere le regard du joueur,
 -- de sorte que le hexapod reste toujours exactement au centre de la vue,
 -- quelle que soit la direction observee.
@@ -419,7 +425,11 @@ function hexapod_v3.stop_driving(self, player)
 		self.camera_rig:remove()
 		self.camera_rig = nil
 	end
-	self.object:set_velocity({ x = 0, y = 0, z = 0 })
+	-- Arrete le deplacement horizontal, mais preserve la vitesse verticale
+	-- courante (chute en cours due a hexapod_v3.gravity) : relacher les
+	-- commandes en l'air ne doit pas interrompre la chute.
+	local vel = self.object:get_velocity()
+	self.object:set_velocity({ x = 0, y = vel.y, z = 0 })
 end
 
 -- Entite invisible (taille nulle) qui sert de support de camera : le
@@ -563,7 +573,10 @@ minetest.register_entity("hexapod_v3:pod", {
 			"hexapod_v3_node.png", "hexapod_v3_node.png",
 			"hexapod_v3_node_front.png", "hexapod_v3_node.png",
 		},
-		collisionbox = { -0.5, -0.5, -0.5, 0.5, 0.5, 0.5 },
+		-- Etendue vers le bas jusqu'a la pointe des pattes (hexapod_v3.leg_drop
+		-- sous le centre du corps) : sans ca, la gravite arrete la chute des
+		-- que le CORPS touche le sol, laissant les pattes s'enfoncer dedans.
+		collisionbox = { -0.5, -(0.5 + hexapod_v3.leg_drop), -0.5, 0.5, 0.5, 0.5 },
 		physical = true,
 		collide_with_objects = true,
 		pointable = true,
@@ -583,7 +596,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	leg_phase = 0,
 
 	on_activate = function(self)
-		self.object:set_acceleration({ x = 0, y = 0, z = 0 })
+		self.object:set_acceleration({ x = 0, y = -hexapod_v3.gravity, z = 0 })
 		hexapod_v3.pods[self] = true
 
 		local pos = self.object:get_pos()
@@ -669,13 +682,21 @@ minetest.register_entity("hexapod_v3:pod", {
 			end
 			self.object:set_yaw(yaw)
 
+			-- On ne pilote que le deplacement horizontal : la composante
+			-- verticale de la vitesse (chute due a hexapod_v3.gravity, ou
+			-- reaction du moteur au contact du sol) est preservee telle
+			-- quelle, pour que le hexapod continue de tomber normalement
+			-- meme pendant qu'on le pilote (par exemple s'il marche jusqu'au
+			-- bord d'une falaise).
 			local dir = minetest.yaw_to_dir(yaw)
-			local vel = { x = 0, y = 0, z = 0 }
+			local vel = { x = 0, y = self.object:get_velocity().y, z = 0 }
 			if ctrl.up then
-				vel = vector.multiply(dir, hexapod_v3.forward_speed)
+				local horizontal = vector.multiply(dir, hexapod_v3.forward_speed)
+				vel.x, vel.z = horizontal.x, horizontal.z
 				signed_speed = hexapod_v3.forward_speed
 			elseif ctrl.down then
-				vel = vector.multiply(dir, -hexapod_v3.forward_speed)
+				local horizontal = vector.multiply(dir, -hexapod_v3.forward_speed)
+				vel.x, vel.z = horizontal.x, horizontal.z
 				signed_speed = -hexapod_v3.forward_speed
 			end
 			self.object:set_velocity(vel)

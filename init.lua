@@ -197,12 +197,17 @@ end
 -- Contrairement au train, chaque piece est desormais attachee a la
 -- PRECEDENTE (et non plus toutes directement a la hanche du train) : une
 -- vraie chaine articulee, ou faire pivoter un parent entraine tout ce qui
--- lui est attache en dessous. La hanche et le genou servent de pivots
--- (leur `rotation` est reanimee a chaque pas par `hexapod_v3.update_legs`,
--- comme les roues) : faire tourner la hanche (axe Y, horizontal) balaie
--- tout le femur+genou+tibia d'un bloc ; faire tourner le genou (axe X,
--- vertical) ne balaie que le tibia. Femur et tibia eux-memes ne tournent
--- jamais (rotation toujours nulle), ils suivent passivement leur pivot.
+-- lui est attache en dessous.
+--
+-- La hanche elle-meme NE DOIT PAS bouger : c'est un node invisible
+-- ("hexapod_v3:leg_pivot", taille nulle), colle exactement a sa position
+-- (decalage nul), qui sert de pivot au femur. Sa `rotation` est reanimee
+-- a chaque pas par `hexapod_v3.update_legs` (comme les roues) : faire
+-- tourner ce pivot (axe Y, horizontal) balaie tout le femur+genou+tibia
+-- d'un bloc, la hanche restant parfaitement immobile. Le genou, lui,
+-- sert directement de pivot pour le tibia (axe X, vertical). Hanche,
+-- femur et tibia eux-memes ne tournent jamais (rotation toujours nulle),
+-- ils suivent passivement leur pivot.
 function hexapod_v3.spawn_leg(self, hip_object, side, group)
 	local s = hexapod_v3.tail_size
 	local hip_pos = hip_object:get_pos()
@@ -211,9 +216,14 @@ function hexapod_v3.spawn_leg(self, hip_object, side, group)
 	local hanche = hexapod_v3.spawn_leg_part("hexapod_v3:leg_joint", hip_object, hip_pos, hanche_offset)
 	table.insert(self.leg_parts, hanche)
 
-	-- Premier node de femur : colle directement sous la hanche (meme x,
-	-- dans le repere local de la hanche).
-	local first_femur = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hanche, hip_pos, { x = 0, y = -s, z = 0 })
+	-- Pivot de hanche : colle exactement sur la hanche (decalage nul),
+	-- immobile au repos ; seule sa rotation sera animee.
+	local hip_pivot = hexapod_v3.spawn_leg_part("hexapod_v3:leg_pivot", hanche, hip_pos, { x = 0, y = 0, z = 0 })
+	table.insert(self.leg_parts, hip_pivot)
+
+	-- Premier node de femur : colle directement sous le pivot de hanche
+	-- (meme x, dans son repere local -- donc sous la hanche au repos).
+	local first_femur = hexapod_v3.spawn_leg_part("hexapod_v3:leg_part", hip_pivot, hip_pos, { x = 0, y = -s, z = 0 })
 	table.insert(self.leg_parts, first_femur)
 
 	-- Nodes de femur suivants : a l'horizontale, chaines les uns aux
@@ -242,9 +252,8 @@ function hexapod_v3.spawn_leg(self, hip_object, side, group)
 	end
 
 	table.insert(self.legs, {
-		hanche = hanche,
-		hanche_parent = hip_object,
-		hanche_offset = hanche_offset,
+		hip_pivot = hip_pivot,
+		hip_pivot_parent = hanche,
 		genou = genou,
 		genou_parent = femur_end,
 		genou_offset = genou_offset,
@@ -309,12 +318,14 @@ end
 -- de sorte que lorsque l'un est en balancement (patte levee, avance),
 -- l'autre est en appui (patte au sol, recule), et inversement.
 --
--- La hanche et le genou etant attaches (donc `set_rotation()` est ignore,
--- comme pour les roues), on reanime leur rotation en rappelant
--- `set_attach` a chaque pas avec le meme decalage de position mais une
--- nouvelle rotation :
--- - hanche : rotation.y (horizontale) = balayage avant/arriere de toute la
---   patte (femur+genou+tibia, qui lui sont tous attaches en cascade) ;
+-- Le pivot de hanche et le genou etant attaches (donc `set_rotation()`
+-- est ignore, comme pour les roues), on reanime leur rotation en
+-- rappelant `set_attach` a chaque pas avec le meme decalage de position
+-- mais une nouvelle rotation :
+-- - pivot de hanche (decalage nul, colle sur la hanche) : rotation.y
+--   (horizontale) = balayage avant/arriere de toute la patte
+--   (femur+genou+tibia, qui lui sont tous attaches en cascade), la hanche
+--   elle-meme restant immobile ;
 -- - genou : rotation.x (verticale) = levee/pose du tibia seul. La levee
 --   n'a lieu que sur la moitie "avant" du cycle (sin > 0, phase de
 --   balancement) ; le genou reste a plat (0) pendant la moitie "arriere"
@@ -333,8 +344,8 @@ function hexapod_v3.update_legs(self, dtime, moving)
 		local hip_deg = hexapod_v3.leg_hip_swing_deg * math.sin(phase)
 		local knee_deg = hexapod_v3.leg_knee_lift_deg * math.max(0, math.sin(phase))
 
-		leg.hanche:set_attach(leg.hanche_parent, "",
-			{ x = leg.hanche_offset.x * 10, y = leg.hanche_offset.y * 10, z = leg.hanche_offset.z * 10 },
+		leg.hip_pivot:set_attach(leg.hip_pivot_parent, "",
+			{ x = 0, y = 0, z = 0 },
 			{ x = 0, y = hip_deg, z = 0 })
 		leg.genou:set_attach(leg.genou_parent, "",
 			{ x = leg.genou_offset.x * 10, y = leg.genou_offset.y * 10, z = leg.genou_offset.z * 10 },
@@ -503,6 +514,39 @@ minetest.register_entity("hexapod_v3:leg_joint", {
 		collisionbox = { 0, 0, 0, 0, 0, 0 },
 		pointable = false,
 		static_save = false,
+	},
+})
+
+-- Pivot invisible de hanche (voir `hexapod_v3.spawn_leg`) : colle sans
+-- decalage sur la hanche, seule sa rotation est animee
+-- (`hexapod_v3.update_legs`) -- la hanche elle-meme ne bouge donc jamais.
+--
+-- Important : `visual_size` ne doit PAS etre nul ({0,0,0}). Le femur (et
+-- tout le reste de la patte) est chaine en veritable enfant de ce pivot
+-- (cf. `hexapod_v3.spawn_leg`) : une echelle nulle sur le parent se
+-- propage multiplicativement a tous ses descendants dans le graphe de
+-- scene, ce qui les rendrait tous invisibles (taille nulle) quelle que
+-- soit leur propre `visual_size`. On utilise donc une taille normale
+-- (comme les autres pieces), et -- avec une taille non nulle, des
+-- textures vides affichent un cube "texture manquante" au lieu de rien
+-- (contrairement a `hexapod_v3:camera_rig`, invisible seulement parce que
+-- sa taille est nulle) -- une texture reellement transparente
+-- (`hexapod_v3_invisible.png`, alpha nul) pour le rendre invisible sans
+-- toucher a son echelle.
+minetest.register_entity("hexapod_v3:leg_pivot", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = { x = hexapod_v3.tail_size, y = hexapod_v3.tail_size, z = hexapod_v3.tail_size },
+		physical = false,
+		collide_with_objects = false,
+		collisionbox = { 0, 0, 0, 0, 0, 0 },
+		pointable = false,
+		static_save = false,
+		textures = {
+			"hexapod_v3_invisible.png", "hexapod_v3_invisible.png",
+			"hexapod_v3_invisible.png", "hexapod_v3_invisible.png",
+			"hexapod_v3_invisible.png", "hexapod_v3_invisible.png",
+		},
 	},
 })
 

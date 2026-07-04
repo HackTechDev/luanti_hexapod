@@ -119,7 +119,18 @@ end
 --    aucune collision au-dessus du robot dans cette zone) ;
 --  - un a droite et un a gauche (x = +-hexapod_v3.leg_reach), directement
 --    sur le pied de chaque patte.
-hexapod_v3.leg_collider_half = 2
+--
+-- La demi-largeur (hexapod_v3.leg_collider_half) doit tenir compte de la
+-- demi-hauteur, FIXE (dictee par hexapod_v3.leg_drop), pour que le COIN le
+-- plus eloigne de la boite (en 3D, horizontal ET vertical combines,
+-- sqrt(2*half^2 + vert_half^2)) reste sous la limite du moteur : a
+-- half=2, ce coin est a ~3,61 noeuds (au-dela de la limite) -- observe en
+-- jeu : approcher une patte bien en face (perpendiculairement a une
+-- face de la boite, donc a une distance d'au plus ~3,0-3,4 noeuds selon
+-- la hauteur) bloque, mais l'approcher en diagonale (vers le coin
+-- horizontal de la boite, la ou la distance au pire cas se produit)
+-- ne bloque pas.
+hexapod_v3.leg_collider_half = 1.7
 hexapod_v3.leg_relay_offsets = {}
 for _, z_center in ipairs(hexapod_v3.leg_relay_z) do
 	table.insert(hexapod_v3.leg_relay_offsets, { x = 0, z = z_center })

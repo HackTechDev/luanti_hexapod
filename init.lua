@@ -83,17 +83,50 @@ hexapod_v3.leg_gait_speed = math.pi * 2  -- vitesse de la phase de marche, en ra
 -- dernier node de tibia.
 hexapod_v3.leg_drop = hexapod_v3.tail_size * (hexapod_v3.leg_tibia_height + 0.5)
 
--- Distance horizontale maximale entre le centre du corps et le point le
--- plus eloigne du hexapod (pattes sur les flancs, train arriere), utilisee
--- pour dimensionner la collisionbox du corps (voir plus bas) de sorte
--- qu'elle englobe tout le hexapod. Le moteur ne fait jamais tourner une
--- collisionbox avec le yaw de l'entite (elle reste toujours alignee sur
--- les axes du monde) : on utilise donc la MEME etendue sur X et sur Z (le
--- pire cas, ici le train arriere) pour que la boite carree qui en resulte
--- englobe le hexapod quelle que soit son orientation.
+-- Distance horizontale maximale entre le centre d'une hanche et le bout de
+-- la patte (genou), utilisee pour dimensionner les "relais" de collision
+-- des pattes (voir hexapod_v3.leg_collider plus bas).
 hexapod_v3.leg_reach = hexapod_v3.tail_size * (hexapod_v3.leg_femur_height + 1) + hexapod_v3.tail_size / 2
-hexapod_v3.tail_reach = hexapod_v3.tail_size * hexapod_v3.tail_count + 0.5
-hexapod_v3.collision_reach = math.max(hexapod_v3.leg_reach, hexapod_v3.tail_reach)
+
+-- Decalage local en Z (par rapport au centre du corps) de chacune des
+-- hanches, calcule avec la meme formule que `hexapod_v3.spawn_tail` (pour
+-- l'offset des segments du train) et `hexapod_v3.spawn_legs` (pour
+-- l'indice de segment de chaque paire de pattes).
+hexapod_v3.leg_relay_z = {}
+for i = 1, hexapod_v3.leg_pair_count do
+	local segment_index = 1 + (i - 1) * hexapod_v3.leg_pair_spacing
+	hexapod_v3.leg_relay_z[i] =
+		-(0.5 + hexapod_v3.tail_size / 2 + (segment_index - 1) * hexapod_v3.tail_size)
+end
+
+-- Decalage local {x, z} (par rapport au centre du corps) de chaque relais
+-- de collision : une entite n'est prise en compte pour la collision
+-- joueur/objet que si le joueur se trouve a moins d'environ 3,4 noeuds de
+-- sa position PROPRE (limite du moteur, cf.
+-- `ActiveObjectMgr::getActiveObjects`). Un relais centre sur la hanche
+-- (x=0) et large de `hexapod_v3.leg_reach` (3.5) place le bout de patte
+-- tout juste a la limite de cette portee -- observe en jeu : le dessus de
+-- la patte bloque (le joueur, debout dessus, est proche de la hanche) mais
+-- pas les flancs (le joueur, au niveau du pied, est a ~leg_reach de la
+-- hanche).
+--
+-- D'ou, PAR PAIRE de pattes, TROIS relais (donc 9 au total), tous avec la
+-- meme petite boite (hexapod_v3.leg_collider_half) pour rester bien en
+-- deca de la limite du moteur, quel que soit le point teste :
+--  - un au centre (x=0), sur la hanche/colonne vertebrale -- sans lui, le
+--    dessus du corps pres d'une hanche n'est plus couvert du tout (essaye
+--    en jeu avec uniquement les deux relais de pattes ci-dessous : plus
+--    aucune collision au-dessus du robot dans cette zone) ;
+--  - un a droite et un a gauche (x = +-hexapod_v3.leg_reach), directement
+--    sur le pied de chaque patte.
+hexapod_v3.leg_collider_half = 2
+hexapod_v3.leg_relay_offsets = {}
+for _, z_center in ipairs(hexapod_v3.leg_relay_z) do
+	table.insert(hexapod_v3.leg_relay_offsets, { x = 0, z = z_center })
+	for _, side in ipairs({ 1, -1 }) do
+		table.insert(hexapod_v3.leg_relay_offsets, { x = side * hexapod_v3.leg_reach, z = z_center })
+	end
+end
 
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
@@ -577,6 +610,65 @@ minetest.register_entity("hexapod_v3:leg_pivot", {
 	},
 })
 
+-- Relais de collision d'une patte (voir hexapod_v3.leg_relay_offsets) :
+-- une entite independante (PAS attachee : un objet attache n'a, cote
+-- serveur, pas d'autre position que celle de son parent, cf.
+-- LuaEntitySAO::step), repositionnee chaque pas exactement sur le pied de
+-- la patte (hexapod_v3.on_step). `pointable = true` est essentiel : sans
+-- lui la collision joueur/objet ne se declenche jamais ici, meme avec
+-- `physical = true` et `collide_with_objects = true` (verifie en jeu par
+-- A/B : une entite de test par ailleurs identique, mais `pointable =
+-- false`, ne bloquait jamais le joueur).
+--
+-- `pointable = true` rend en revanche l'objet cliquable, avec une
+-- `selectionbox` qui recopie par defaut la `collisionbox`. D'ou la
+-- `selectionbox` explicite, nulle, ci-dessous : sans elle, un clic droit
+-- pres d'un relais viserait ce dernier plutot que le sol (empechant de
+-- poser un autre hexapod a proximite) ou plutot que le corps du hexapod
+-- (empechant de le piloter).
+--
+-- La collisionbox est carree (meme etendue en X et en Z,
+-- hexapod_v3.leg_collider_half) : le moteur ne fait jamais tourner une
+-- collisionbox avec le yaw d'une entite (elle reste toujours alignee sur
+-- les axes du monde) -- une boite carree reste donc valable quelle que
+-- soit l'orientation du hexapod, puisque l'origine du relais, elle, suit
+-- deja la rotation (voir hexapod_v3.leg_relay_offsets).
+--
+-- Verticalement, la boite est CENTREE sur l'origine du relais (et non
+-- calee sur celle-ci comme un simple bas/haut) : l'origine suivie par le
+-- moteur pour la portee de ~3,4 noeuds (cf. plus haut) est la POSITION du
+-- relais lui-meme (hexapod_v3.on_step la place a hauteur du corps -
+-- hexapod_v3.leg_drop / 2, soit le milieu de la patte, PAS a hauteur du
+-- corps) -- sinon, marcher au ras du sol contre le pied
+-- (a hexapod_v3.leg_drop sous le corps) met le joueur hors de portee de
+-- cette origine, meme si il est bien a l'interieur de la boite (verifie
+-- en jeu : ca bloquait par-dessus, pres du corps, mais pas de face, au
+-- niveau du pied).
+minetest.register_entity("hexapod_v3:leg_collider", {
+	initial_properties = {
+		visual = "cube",
+		visual_size = {
+			x = 2 * hexapod_v3.leg_collider_half,
+			y = 1 + hexapod_v3.leg_drop,
+			z = 2 * hexapod_v3.leg_collider_half,
+		},
+		textures = {
+			"hexapod_v3_invisible.png", "hexapod_v3_invisible.png",
+			"hexapod_v3_invisible.png", "hexapod_v3_invisible.png",
+			"hexapod_v3_invisible.png", "hexapod_v3_invisible.png",
+		},
+		collisionbox = {
+			-hexapod_v3.leg_collider_half, -(1 + hexapod_v3.leg_drop) / 2, -hexapod_v3.leg_collider_half,
+			hexapod_v3.leg_collider_half, (1 + hexapod_v3.leg_drop) / 2, hexapod_v3.leg_collider_half,
+		},
+		selectionbox = { 0, 0, 0, 0, 0, 0 },
+		physical = true,
+		collide_with_objects = true,
+		pointable = true,
+		static_save = false,
+	},
+})
+
 minetest.register_entity("hexapod_v3:pod", {
 	initial_properties = {
 		visual = "cube",
@@ -593,21 +685,11 @@ minetest.register_entity("hexapod_v3:pod", {
 		-- Etendue vers le bas jusqu'a la pointe des pattes (hexapod_v3.leg_drop
 		-- sous le centre du corps) : sans ca, la gravite arrete la chute des
 		-- que le CORPS touche le sol, laissant les pattes s'enfoncer dedans.
-		-- Etendue sur X/Z jusqu'a hexapod_v3.collision_reach (cf. plus haut) :
-		-- sans ca, le joueur traverse librement les pattes et le train arriere
-		-- des qu'il ne pilote pas le hexapod (seul le corps, 1 noeud, avait
-		-- une collision).
-		collisionbox = {
-			-hexapod_v3.collision_reach, -(0.5 + hexapod_v3.leg_drop), -hexapod_v3.collision_reach,
-			hexapod_v3.collision_reach, 0.5, hexapod_v3.collision_reach,
-		},
-		-- La `selectionbox` (ce que vise le joueur au clic droit, pour
-		-- piloter ou pour poser un autre hexapod) est ici volontairement
-		-- limitee au corps : par defaut elle recopie la `collisionbox`, ce
-		-- qui, une fois celle-ci elargie ci-dessus, rendait impossible de
-		-- poser un nouveau hexapod pres d'un existant (le clic visait la
-		-- collisionbox geante plutot que le sol).
-		selectionbox = { -0.5, -(0.5 + hexapod_v3.leg_drop), -0.5, 0.5, 0.5, 0.5 },
+		-- La collision des pattes elles-memes (X/Z) est geree separement par
+		-- des relais independants, voir "hexapod_v3:leg_collider" plus haut :
+		-- une collisionbox geante ici, centree sur le corps, ne fonctionnerait
+		-- pas au-dela d'environ 3,4 noeuds de distance (limite du moteur).
+		collisionbox = { -0.5, -(0.5 + hexapod_v3.leg_drop), -0.5, 0.5, 0.5, 0.5 },
 		physical = true,
 		collide_with_objects = true,
 		pointable = true,
@@ -625,6 +707,7 @@ minetest.register_entity("hexapod_v3:pod", {
 	leg_parts = nil,
 	legs = nil,        -- pivots (hanche/genou) de chaque patte, pour la demarche
 	leg_phase = 0,
+	leg_colliders = nil,  -- relais de collision des pattes (voir hexapod_v3:leg_collider)
 
 	on_activate = function(self)
 		self.object:set_acceleration({ x = 0, y = -hexapod_v3.gravity, z = 0 })
@@ -638,6 +721,19 @@ minetest.register_entity("hexapod_v3:pod", {
 
 		hexapod_v3.spawn_tail(self)  -- train arriere
 		hexapod_v3.spawn_legs(self)
+
+		-- Relais de collision des pattes : PAS attaches (`set_attach`), car
+		-- un objet attache n'a, cote serveur, pas d'autre position que celle
+		-- de son parent (cf. LuaEntitySAO::step) -- juste repositionnes
+		-- chaque pas sur chaque pied (voir on_step), en tenant compte du
+		-- yaw courant.
+		self.leg_colliders = {}
+		for _, offset in ipairs(hexapod_v3.leg_relay_offsets) do
+			table.insert(self.leg_colliders,
+				minetest.add_entity(
+					vector.add(pos, { x = offset.x, y = -hexapod_v3.leg_drop / 2, z = offset.z }),
+					"hexapod_v3:leg_collider"))
+		end
 	end,
 
 	on_deactivate = function(self)
@@ -673,6 +769,12 @@ minetest.register_entity("hexapod_v3:pod", {
 			self.leg_parts = nil
 		end
 		self.legs = nil
+		if self.leg_colliders then
+			for _, collider in ipairs(self.leg_colliders) do
+				collider:remove()
+			end
+			self.leg_colliders = nil
+		end
 		hexapod_v3.pods[self] = nil
 	end,
 
@@ -735,6 +837,32 @@ minetest.register_entity("hexapod_v3:pod", {
 			hexapod_v3.update_camera(self, driver)
 		else
 			self.driver = nil
+		end
+
+		-- Les relais de collision des pattes suivent la position ET le yaw
+		-- du corps (leur decalage local {x, z} est tourne en consequence)
+		-- via `set_pos` (pas `move_to`, pour ne pas trainer derriere le
+		-- corps). "avant" = minetest.yaw_to_dir(yaw) ; "droite" = son
+		-- perpendiculaire (verifie a yaw=0 : (1,0,0), coherent avec `side`
+		-- = 1 = droite utilise ailleurs, cf. hexapod_v3.attach_wheel).
+		--
+		-- Le decalage vertical (-hexapod_v3.leg_drop / 2) place l'origine
+		-- du relais au milieu de sa propre boite (et non a hauteur du
+		-- corps) : voir le commentaire sur hexapod_v3:leg_collider plus
+		-- haut.
+		if self.leg_colliders then
+			local pod_pos = self.object:get_pos()
+			local yaw = self.object:get_yaw()
+			local forward = minetest.yaw_to_dir(yaw)
+			local right = { x = math.cos(yaw), y = 0, z = math.sin(yaw) }
+			for i, collider in ipairs(self.leg_colliders) do
+				local offset = hexapod_v3.leg_relay_offsets[i]
+				local world_offset = vector.add(
+					vector.multiply(right, offset.x),
+					vector.multiply(forward, offset.z))
+				world_offset.y = -hexapod_v3.leg_drop / 2
+				collider:set_pos(vector.add(pod_pos, world_offset))
+			end
 		end
 
 		-- Les roues suivent le hexapod en permanence (meme non pilote), et ne

@@ -408,6 +408,9 @@ function hexapod_v3.start_driving(self, player)
 	local target = hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
 	self.camera_rig = minetest.add_entity(target, "hexapod_v3:camera_rig")
 	player:set_attach(self.camera_rig, "", { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 0 })
+
+	minetest.chat_send_player(name,
+		"[Hexapod] Vous prenez les commandes du hexapod. Clic droit pour descendre.")
 end
 
 function hexapod_v3.stop_driving(self, player)
@@ -430,6 +433,8 @@ function hexapod_v3.stop_driving(self, player)
 	-- commandes en l'air ne doit pas interrompre la chute.
 	local vel = self.object:get_velocity()
 	self.object:set_velocity({ x = 0, y = vel.y, z = 0 })
+
+	minetest.chat_send_player(name, "[Hexapod] Vous quittez le hexapod.")
 end
 
 -- Entite invisible (taille nulle) qui sert de support de camera : le

@@ -83,6 +83,18 @@ hexapod_v3.leg_gait_speed = math.pi * 2  -- vitesse de la phase de marche, en ra
 -- dernier node de tibia.
 hexapod_v3.leg_drop = hexapod_v3.tail_size * (hexapod_v3.leg_tibia_height + 0.5)
 
+-- Distance horizontale maximale entre le centre du corps et le point le
+-- plus eloigne du hexapod (pattes sur les flancs, train arriere), utilisee
+-- pour dimensionner la collisionbox du corps (voir plus bas) de sorte
+-- qu'elle englobe tout le hexapod. Le moteur ne fait jamais tourner une
+-- collisionbox avec le yaw de l'entite (elle reste toujours alignee sur
+-- les axes du monde) : on utilise donc la MEME etendue sur X et sur Z (le
+-- pire cas, ici le train arriere) pour que la boite carree qui en resulte
+-- englobe le hexapod quelle que soit son orientation.
+hexapod_v3.leg_reach = hexapod_v3.tail_size * (hexapod_v3.leg_femur_height + 1) + hexapod_v3.tail_size / 2
+hexapod_v3.tail_reach = hexapod_v3.tail_size * hexapod_v3.tail_count + 0.5
+hexapod_v3.collision_reach = math.max(hexapod_v3.leg_reach, hexapod_v3.tail_reach)
+
 -- Ensemble des hexapods actifs (cle = luaentity), utilise pour detacher
 -- proprement un joueur qui se deconnecte pendant qu'il pilote.
 hexapod_v3.pods = {}
@@ -408,6 +420,9 @@ function hexapod_v3.start_driving(self, player)
 	local target = hexapod_v3.compute_camera_pos(pod_pos, look_dir, player)
 	self.camera_rig = minetest.add_entity(target, "hexapod_v3:camera_rig")
 	player:set_attach(self.camera_rig, "", { x = 0, y = 0, z = 0 }, { x = 0, y = 0, z = 0 })
+
+	minetest.chat_send_player(name,
+		"[Hexapod] Vous prenez les commandes du hexapod. Clic droit pour descendre.")
 end
 
 function hexapod_v3.stop_driving(self, player)
@@ -430,6 +445,8 @@ function hexapod_v3.stop_driving(self, player)
 	-- commandes en l'air ne doit pas interrompre la chute.
 	local vel = self.object:get_velocity()
 	self.object:set_velocity({ x = 0, y = vel.y, z = 0 })
+
+	minetest.chat_send_player(name, "[Hexapod] Vous quittez le hexapod.")
 end
 
 -- Entite invisible (taille nulle) qui sert de support de camera : le
@@ -576,7 +593,21 @@ minetest.register_entity("hexapod_v3:pod", {
 		-- Etendue vers le bas jusqu'a la pointe des pattes (hexapod_v3.leg_drop
 		-- sous le centre du corps) : sans ca, la gravite arrete la chute des
 		-- que le CORPS touche le sol, laissant les pattes s'enfoncer dedans.
-		collisionbox = { -0.5, -(0.5 + hexapod_v3.leg_drop), -0.5, 0.5, 0.5, 0.5 },
+		-- Etendue sur X/Z jusqu'a hexapod_v3.collision_reach (cf. plus haut) :
+		-- sans ca, le joueur traverse librement les pattes et le train arriere
+		-- des qu'il ne pilote pas le hexapod (seul le corps, 1 noeud, avait
+		-- une collision).
+		collisionbox = {
+			-hexapod_v3.collision_reach, -(0.5 + hexapod_v3.leg_drop), -hexapod_v3.collision_reach,
+			hexapod_v3.collision_reach, 0.5, hexapod_v3.collision_reach,
+		},
+		-- La `selectionbox` (ce que vise le joueur au clic droit, pour
+		-- piloter ou pour poser un autre hexapod) est ici volontairement
+		-- limitee au corps : par defaut elle recopie la `collisionbox`, ce
+		-- qui, une fois celle-ci elargie ci-dessus, rendait impossible de
+		-- poser un nouveau hexapod pres d'un existant (le clic visait la
+		-- collisionbox geante plutot que le sol).
+		selectionbox = { -0.5, -(0.5 + hexapod_v3.leg_drop), -0.5, 0.5, 0.5, 0.5 },
 		physical = true,
 		collide_with_objects = true,
 		pointable = true,

@@ -159,6 +159,70 @@ compte pour poser le hexapod plus haut que son seul corps ne le
 demanderait, afin que les pattes ne s'enfoncent pas dans le sol au lieu
 de rester visibles au-dessus.
 
+### Collision des pattes
+
+Le corps du hexapod (`hexapod_v3:pod`) a sa propre `collisionbox`, mais
+elle ne couvre que ce seul node : sans rien de plus, un joueur qui ne
+pilote pas le hexapod (donc pas immobilisé par l'attache de la caméra)
+peut traverser librement les pattes.
+
+Une simple `collisionbox` unique et large sur le corps, englobant tout le
+hexapod, ne fonctionne **pas** : le moteur ne teste la collision d'un
+objet contre un joueur que si celui-ci se trouve à moins d'environ **3,4
+nœuds** de la position propre de l'objet (celle que le serveur suit pour
+lui, indépendamment de la taille de sa `collisionbox` -- cf.
+`ActiveObjectMgr::getActiveObjects` côté moteur). Au-delà, l'objet entier
+est ignoré pour la collision, même si sa boîte s'étend bien plus loin.
+
+La solution retenue : neuf entités invisibles et indépendantes
+(`hexapod_v3:leg_collider`), trois par paire de pattes (`hexapod_v3.leg_relay_offsets`) --
+une sur la hanche/colonne vertébrale, une sur le pied gauche, une sur le
+pied droit -- repositionnées à chaque pas exactement sur le point qu'elles
+couvrent, en tenant compte du yaw courant du hexapod. Chacune a une petite
+boîte carrée (`hexapod_v3.leg_collider_half`, 1,7 nœud par défaut), pour
+que le joueur reste toujours à moins de ~3,4 nœuds de son origine, quel
+que soit l'endroit où il la touche :
+
+- **Pourquoi indépendantes et non attachées ?** Un objet **attaché**
+  n'a, côté serveur, aucune autre position que celle de son parent (cf.
+  `LuaEntitySAO::step`) : son décalage visuel (`set_attach`) n'est qu'un
+  effet côté client, invisible au moteur physique. Impossible donc de
+  donner à une patte sa propre zone de collision tant qu'elle reste
+  attachée -- d'où ces relais indépendants, réalignés "à la main" chaque
+  pas via `set_pos` (pas `move_to`, pour ne pas traîner derrière le
+  corps).
+- **Pourquoi `pointable = true` ?** Sans lui, aucune collision ne se
+  déclenche jamais ici, même avec `physical = true` et
+  `collide_with_objects = true` (vérifié en jeu par comparaison A/B).
+  Cela rend en revanche l'objet cliquable ; une `selectionbox` explicite
+  et nulle empêche donc un clic droit près d'un relais de viser ce
+  dernier plutôt que le sol (empêchant de poser un autre hexapod à
+  proximité) ou le corps du hexapod (empêchant de le piloter).
+- **Pourquoi une boîte carrée (même étendue en X et en Z) ?** Le moteur
+  ne fait jamais tourner une `collisionbox` avec le yaw d'une entité
+  (elle reste toujours alignée sur les axes du monde) : une boîte carrée
+  reste donc valable quelle que soit l'orientation du hexapod, puisque
+  c'est l'*origine* du relais qui suit déjà la rotation.
+- **Pourquoi centrer verticalement la boîte sur l'origine du relais ?**
+  La zone à couvrir descend jusqu'au pied, bien en dessous du corps
+  (`hexapod_v3.leg_drop`). Si l'origine du relais restait à hauteur du
+  corps (au lieu du milieu de la patte), un joueur au ras du sol contre
+  le pied se retrouvait hors de portée du moteur (~3,4 nœuds) même en
+  étant bien à l'intérieur de la boîte : la collision fonctionnait
+  au-dessus (près du corps) mais pas de face, au niveau du pied.
+- **Pourquoi `hexapod_v3.leg_collider_half = 1,7` (et pas plus) ?** Le
+  coin le plus éloigné d'une boîte carrée, en 3D (horizontal ET vertical
+  combinés), doit lui aussi rester sous la limite du moteur. Avec une
+  demi-largeur de 2, ce coin est à ~3,61 nœuds -- une approche bien en
+  face d'une patte (perpendiculaire à une face de la boîte) restait sous
+  la limite et bloquait, mais une approche en diagonale (vers ce coin) la
+  dépassait et ne bloquait pas. Réduire à 1,7 ramène ce pire cas à ~3,29
+  nœuds.
+
+**Limite connue.** Seules les pattes (et la colonne vertébrale au niveau
+des hanches) sont couvertes : le train arrière lui-même, entre deux
+paires de pattes, reste traversable.
+
 ### Démarche des pattes
 
 Tant que le hexapod se déplace ou pivote, ses 6 pattes marchent selon une
